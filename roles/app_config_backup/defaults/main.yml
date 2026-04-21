@@ -1,0 +1,17 @@
+---
+app_config_backup_enabled: false
+
+app_config_backup_scripts_dir: /usr/local/bin
+app_config_backup_root: "/mnt/backups/{{ inventory_hostname }}/app-config"
+app_config_backup_retention_days: 60
+app_config_backup_on_calendar: "*-*-* 02:30:00"
+app_config_backup_excludes:
+  - logs
+  - logs/*
+  - Logs
+  - Logs/*
+  - cache
+  - cache/*
+  - Cache
+  - Cache/*
+app_config_backup_items: []

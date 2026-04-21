@@ -1,0 +1,17 @@
+[sssd]
+config_file_version = 2
+services = {{ identity_client_sssd_services | join(',') }}
+domains = {{ identity_client_domain_name }}
+
+[nss]
+
+[pam]
+
+[sudo]
+{% for domain in identity_client_sssd_domains %}
+[domain/{{ domain.name }}]
+{% for key, value in domain.options | dictsort %}
+{{ key }} = {{ value }}
+{% endfor %}
+
+{% endfor %}

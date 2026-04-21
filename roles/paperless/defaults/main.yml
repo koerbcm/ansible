@@ -1,0 +1,70 @@
+---
+paperless_enabled: false
+paperless_project_name: paperless
+paperless_project_dir: "{{ homelab_stack_root }}/paperless"
+paperless_compose_file: compose.yml
+
+paperless_web_service_name: webserver
+paperless_web_image: ghcr.io/paperless-ngx/paperless-ngx:latest
+paperless_web_container_name: paperless-webserver-1
+paperless_published_port: 8010
+
+paperless_db_service_name: db
+paperless_db_image: postgres:16
+paperless_db_container_name: paperless-db-1
+paperless_db_name: paperless
+paperless_db_user: paperless
+paperless_db_password: ""
+paperless_db_data_dir: ""
+
+paperless_broker_service_name: broker
+paperless_broker_image: redis:7
+paperless_broker_container_name: paperless-broker-1
+paperless_redis_data_dir: ""
+
+paperless_gotenberg_service_name: gotenberg
+paperless_gotenberg_image: gotenberg/gotenberg:8.7
+paperless_gotenberg_container_name: paperless-gotenberg-1
+paperless_gotenberg_published_port: 3300
+paperless_gotenberg_command:
+  - gotenberg
+  - --chromium-disable-javascript=true
+  - --chromium-allow-list=file:///tmp/.*
+
+paperless_tika_service_name: tika
+paperless_tika_image: apache/tika:latest
+paperless_tika_container_name: paperless-tika-1
+paperless_tika_published_port: 9998
+
+paperless_data_dir: ""
+paperless_media_dir: ""
+paperless_export_dir: ""
+paperless_consume_dir: ""
+
+paperless_url: ""
+paperless_secret_key: ""
+paperless_csrf_trusted_origins: ""
+paperless_email_host: ""
+paperless_email_from: ""
+paperless_email_port: 587
+paperless_email_host_user: ""
+paperless_email_host_password: ""
+paperless_email_use_tls: "true"
+paperless_tika_enabled: "1"
+paperless_tika_endpoint: ""
+paperless_gotenberg_endpoint: ""
+paperless_usermap_uid: 1000
+paperless_usermap_gid: 100
+paperless_filename_format: "{{ '{{ created_year }}/{{ correspondent }}/{{ document_type }}_{{ title }}_{{ created }}' }}"
+paperless_consumer_recursive: "1"
+paperless_consumer_polling: "60"
+paperless_consumer_subdirs_as_tags: "1"
+paperless_consumer_ignore_patterns: '[".DS_STORE/*", "._*", ".stfolder/*","@eaDir/*"]'
+paperless_consumer_delete_duplicates: "1"
+paperless_ocr_user_args: '{"invalidate_digital_signatures": true}'
+
+paperless_watchtower_monitor_only: true
+paperless_log_driver: gelf
+paperless_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"

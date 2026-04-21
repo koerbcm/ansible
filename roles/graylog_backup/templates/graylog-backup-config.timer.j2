@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule Graylog config backups
+
+[Timer]
+OnCalendar={{ graylog_backup_config_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

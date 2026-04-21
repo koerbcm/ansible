@@ -1,0 +1,16 @@
+---
+plex_enabled: false
+plex_project_name: plex
+plex_project_dir: "{{ homelab_stack_root }}/plex"
+plex_compose_file: compose.yml
+plex_image: lscr.io/linuxserver/plex:latest
+plex_container_name: plex
+plex_service_name: plex
+plex_network_mode: host
+plex_config_volume_name: plexConfig_data
+plex_movies_volume_name: plex_plex_movies
+plex_puid: 1000
+plex_pgid: 1000
+plex_version: docker
+plex_transcode_dir: /tmpPlexTranscode
+plex_devices: []

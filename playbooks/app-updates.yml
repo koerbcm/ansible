@@ -1,0 +1,269 @@
+---
+- name: Rolling application updates
+  hosts: docker_hosts
+  become: true
+  serial: 1
+  vars:
+    docker_compose_pull_policy: always
+    app_update_postcheck_wait_seconds: 20
+    app_update_fail_on_missing_running_containers: true
+    app_update_fail_on_unhealthy_containers: true
+    app_update_fail_on_restarting_containers: true
+    app_update_ignore_missing_containers: []
+    app_update_ignore_unhealthy_containers: []
+    app_update_ignore_restarting_containers: []
+    app_update_role_list:
+      - ntfy
+      - radarr
+      - sonarr
+      - sabnzbd
+      - lazylibrarian
+      - plex
+      - postgresql
+      - netdata
+      - homepage
+      - ombi
+      - it_tools
+      - n8n
+      - portainer
+      - nextcloud
+      - paperless
+      - mysql
+      - watchtower
+      - portainer_agent
+      - graylog
+  tasks:
+    - name: Run app update workflow
+      block:
+        - name: Start Uptime Kuma maintenance window
+          ansible.builtin.include_role:
+            name: uptime_kuma_maintenance
+            apply:
+              tags:
+                - app-updates
+                - apps
+                - maintenance-window
+          vars:
+            uptime_kuma_maintenance_state: start
+          tags:
+            - app-updates
+            - apps
+            - maintenance-window
+
+        - name: Trigger pre-update backups
+          ansible.builtin.include_role:
+            name: backup_trigger
+            apply:
+              tags:
+                - app-updates
+                - backup
+          tags:
+            - app-updates
+            - backup
+
+        - name: Capture running containers before updates
+          ansible.builtin.command:
+            cmd: docker ps --format {% raw %}'{{.Names}}'{% endraw %}
+          register: app_update_running_containers_before
+          changed_when: false
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Refresh application roles with pulled images
+          ansible.builtin.include_role:
+            name: "{{ item }}"
+            apply:
+              tags:
+                - app-updates
+                - apps
+          loop: "{{ app_update_role_list }}"
+          loop_control:
+            label: "{{ item }}"
+          when: lookup('vars', item ~ '_enabled', default=false) | bool
+          tags:
+            - app-updates
+            - apps
+
+        - name: Wait for services to stabilize after updates
+          ansible.builtin.pause:
+            seconds: "{{ app_update_postcheck_wait_seconds }}"
+          when: app_update_postcheck_wait_seconds | int > 0
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Capture running containers after updates
+          ansible.builtin.command:
+            cmd: docker ps --format {% raw %}'{{.Names}}'{% endraw %}
+          register: app_update_running_containers_after
+          changed_when: false
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Capture unhealthy containers after updates
+          ansible.builtin.command:
+            cmd: docker ps --filter health=unhealthy --format {% raw %}'{{.Names}}'{% endraw %}
+          register: app_update_unhealthy_containers_after
+          changed_when: false
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Capture restarting containers after updates
+          ansible.builtin.command:
+            cmd: docker ps --filter status=restarting --format {% raw %}'{{.Names}}'{% endraw %}
+          register: app_update_restarting_containers_after
+          changed_when: false
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Compute post-update running containers before filter
+          ansible.builtin.set_fact:
+            app_update_running_before_filtered: >-
+              {{
+                app_update_running_containers_before.stdout_lines
+                | default([])
+                | map('trim')
+                | reject('equalto', '')
+                | list
+                | difference(app_update_ignore_missing_containers | default([]))
+              }}
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Compute post-update running containers after filter
+          ansible.builtin.set_fact:
+            app_update_running_after_filtered: >-
+              {{
+                app_update_running_containers_after.stdout_lines
+                | default([])
+                | map('trim')
+                | reject('equalto', '')
+                | list
+              }}
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Compute post-update unhealthy containers filter
+          ansible.builtin.set_fact:
+            app_update_unhealthy_containers_filtered: >-
+              {{
+                app_update_unhealthy_containers_after.stdout_lines
+                | default([])
+                | map('trim')
+                | reject('equalto', '')
+                | list
+                | difference(app_update_ignore_unhealthy_containers | default([]))
+              }}
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Compute post-update restarting containers filter
+          ansible.builtin.set_fact:
+            app_update_restarting_containers_filtered: >-
+              {{
+                app_update_restarting_containers_after.stdout_lines
+                | default([])
+                | map('trim')
+                | reject('equalto', '')
+                | list
+                | difference(app_update_ignore_restarting_containers | default([]))
+              }}
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Compute post-update container health derived facts
+          ansible.builtin.set_fact:
+            app_update_missing_running_containers: >-
+              {{
+                app_update_running_before_filtered | default([])
+                | difference(app_update_running_after_filtered | default([]))
+              }}
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Report post-update container checks
+          ansible.builtin.debug:
+            msg:
+              - "Running before update: {{ app_update_running_before_filtered | length }}"
+              - "Running after update: {{ app_update_running_after_filtered | length }}"
+              - "Missing running containers: {{ app_update_missing_running_containers | default([]) }}"
+              - "Unhealthy containers: {{ app_update_unhealthy_containers_filtered | default([]) }}"
+              - "Restarting containers: {{ app_update_restarting_containers_filtered | default([]) }}"
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Enforce post-update running container continuity
+          ansible.builtin.assert:
+            that:
+              - app_update_missing_running_containers | length == 0
+            fail_msg: >-
+              Containers that were running before updates are now absent:
+              {{ app_update_missing_running_containers }}
+          when: app_update_fail_on_missing_running_containers | bool
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Enforce post-update unhealthy container check
+          ansible.builtin.assert:
+            that:
+              - app_update_unhealthy_containers_filtered | length == 0
+            fail_msg: >-
+              Unhealthy containers detected after updates:
+              {{ app_update_unhealthy_containers_filtered }}
+          when: app_update_fail_on_unhealthy_containers | bool
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+        - name: Enforce post-update restarting container check
+          ansible.builtin.assert:
+            that:
+              - app_update_restarting_containers_filtered | length == 0
+            fail_msg: >-
+              Restarting containers detected after updates:
+              {{ app_update_restarting_containers_filtered }}
+          when: app_update_fail_on_restarting_containers | bool
+          tags:
+            - app-updates
+            - apps
+            - post-check
+
+      always:
+        - name: End Uptime Kuma maintenance window
+          ansible.builtin.include_role:
+            name: uptime_kuma_maintenance
+            apply:
+              tags:
+                - app-updates
+                - apps
+                - maintenance-window
+          vars:
+            uptime_kuma_maintenance_state: end
+          tags:
+            - app-updates
+            - apps
+            - maintenance-window

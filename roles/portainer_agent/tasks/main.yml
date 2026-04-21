@@ -1,0 +1,86 @@
+---
+- name: Validate Portainer agent configuration
+  ansible.builtin.assert:
+    that:
+      - portainer_agent_project_dir | length > 0
+      - portainer_agent_compose_file | length > 0
+      - portainer_agent_published_port | int > 0
+    fail_msg: "Portainer agent requires a project directory, compose filename, and published port."
+    success_msg: "Portainer agent configuration is valid."
+  when: portainer_agent_enabled | bool
+
+- name: Ensure Portainer agent project directory exists
+  ansible.builtin.file:
+    path: "{{ portainer_agent_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: portainer_agent_enabled | bool
+
+- name: Render Portainer agent compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/portainer-agent.compose.yml.j2"
+    dest: "{{ portainer_agent_project_dir }}/{{ portainer_agent_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: portainer_agent_enabled | bool
+
+- name: Inspect existing Portainer agent container
+  community.docker.docker_container_info:
+    name: portainer_agent
+  register: portainer_agent_existing_container
+  when: portainer_agent_enabled | bool
+
+- name: Determine whether Portainer agent needs one-time compose adoption
+  ansible.builtin.set_fact:
+    portainer_agent_needs_adoption: >-
+      {{
+        (portainer_agent_existing_container.exists | default(false))
+        and
+        (
+          ((portainer_agent_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != portainer_agent_project_name
+        )
+      }}
+  when: portainer_agent_enabled | bool
+
+- name: Note Portainer agent one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: >-
+      Existing standalone portainer_agent container would be replaced so the
+      service can be managed by Docker Compose.
+  when:
+    - portainer_agent_enabled | bool
+    - ansible_check_mode
+    - portainer_agent_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Portainer agent container
+  community.docker.docker_container:
+    name: portainer_agent
+    state: absent
+    force_kill: true
+  when:
+    - portainer_agent_enabled | bool
+    - not ansible_check_mode
+    - portainer_agent_needs_adoption | default(false)
+
+- name: Deploy Portainer agent with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ portainer_agent_project_name }}"
+    project_src: "{{ portainer_agent_project_dir }}"
+    files:
+      - "{{ portainer_agent_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  when:
+    - portainer_agent_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Portainer agent compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Portainer agent docker compose deployment."
+  when:
+    - portainer_agent_enabled | bool
+    - ansible_check_mode

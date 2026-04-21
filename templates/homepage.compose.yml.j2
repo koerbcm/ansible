@@ -1,0 +1,20 @@
+services:
+  {{ homepage_service_name }}:
+    image: {{ homepage_image | quote }}
+    container_name: {{ homepage_container_name | quote }}
+    environment:
+      PUID: {{ homepage_puid | string | quote }}
+      PGID: {{ homepage_pgid | string | quote }}
+      HOMEPAGE_ALLOWED_HOSTS: {{ homepage_allowed_hosts | quote }}
+    ports:
+      - "{{ homepage_published_port }}:3000"
+    restart: unless-stopped
+    volumes:
+      - {{ homepage_config_dir | quote }}:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      driver: {{ homepage_log_driver | quote }}
+      options:
+{% for key, value in homepage_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}

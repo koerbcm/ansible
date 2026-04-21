@@ -1,0 +1,15 @@
+---
+lazylibrarian_enabled: false
+lazylibrarian_project_name: lazylibrarian
+lazylibrarian_project_dir: "{{ homelab_stack_root }}/lazylibrarian"
+lazylibrarian_compose_file: compose.yml
+lazylibrarian_image: lscr.io/linuxserver/lazylibrarian:latest
+lazylibrarian_container_name: lazylibrarian
+lazylibrarian_service_name: lazylibrarian
+lazylibrarian_config_dir: ""
+lazylibrarian_books_dir: /mnt/plexLibrary
+lazylibrarian_downloads_dir: /mnt/plexStaging
+lazylibrarian_published_port: 38084
+lazylibrarian_puid: 1000
+lazylibrarian_pgid: 1000
+lazylibrarian_docker_mods: linuxserver/mods:universal-calibre|linuxserver/mods:lazylibrarian-ffmpeg

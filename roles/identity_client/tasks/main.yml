@@ -1,0 +1,88 @@
+---
+- name: Validate identity client configuration
+  ansible.builtin.assert:
+    that:
+      - identity_client_domain_name | length > 0
+      - identity_client_sssd_domains | length > 0
+      - identity_client_ldap_default_authtok | length > 0
+    fail_msg: >-
+      identity_client is enabled but incomplete. Set the LDAP bind secret with Ansible Vault
+      before applying this role.
+  when: identity_client_enabled | bool
+
+- name: Install identity client packages
+  ansible.builtin.apt:
+    name: "{{ identity_client_packages }}"
+    state: present
+    update_cache: true
+  when: identity_client_enabled | bool
+
+- name: Ensure sssd configuration directory exists
+  ansible.builtin.file:
+    path: /etc/sssd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: identity_client_enabled | bool
+
+- name: Render sssd configuration
+  ansible.builtin.template:
+    src: sssd.conf.j2
+    dest: /etc/sssd/sssd.conf
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when: identity_client_enabled | bool
+  notify: Restart sssd
+
+- name: Configure nsswitch integration
+  ansible.builtin.lineinfile:
+    path: /etc/nsswitch.conf
+    regexp: "^{{ item.key }}:"
+    line: "{{ '%-15s %s' | format(item.key + ':', item.value) }}"
+    backup: true
+  loop: "{{ identity_client_nsswitch_map | dict2items }}"
+  when: identity_client_enabled | bool
+
+- name: Ensure sssd service is enabled and started
+  ansible.builtin.systemd_service:
+    name: sssd
+    enabled: true
+    state: started
+  when: identity_client_enabled | bool
+
+- name: Disable redundant SSSD responder socket units
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+    masked: true
+  loop: "{{ identity_client_responder_socket_units }}"
+  when:
+    - identity_client_enabled | bool
+    - identity_client_manage_responder_sockets | bool
+
+- name: Clear failed state for disabled SSSD responder sockets
+  ansible.builtin.command:
+    cmd: "systemctl reset-failed {{ identity_client_responder_socket_units | join(' ') }}"
+  changed_when: false
+  failed_when: false
+  when:
+    - identity_client_enabled | bool
+    - identity_client_manage_responder_sockets | bool
+
+- name: Validate rendered sssd configuration
+  ansible.builtin.command:
+    cmd: sssctl config-check
+  changed_when: false
+  when: identity_client_enabled | bool
+
+- name: Validate LDAP-backed identity lookup
+  ansible.builtin.command:
+    cmd: "getent passwd {{ identity_client_validation_user }}"
+  changed_when: false
+  when:
+    - identity_client_enabled | bool
+    - identity_client_validation_user | length > 0

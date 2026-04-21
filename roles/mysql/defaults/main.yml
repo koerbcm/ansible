@@ -1,0 +1,30 @@
+---
+mysql_enabled: false
+mysql_manage_runtime: false
+
+mysql_project_name: mysql
+mysql_project_dir: "{{ homelab_stack_root }}/mysql"
+mysql_compose_file: compose.yml
+mysql_env_file: .env
+
+mysql_image: mysql:8.4
+mysql_container_name: mysql-db-1
+mysql_service_name: db
+mysql_hostname: mysql
+mysql_published_port: 3306
+
+mysql_root_password: "{{ docker1_mysql_root_password }}"
+mysql_database: db
+mysql_app_user: koerbcm
+mysql_app_password: "{{ docker1_mysql_app_password }}"
+mysql_extra_flags: --default-authentication-plugin=caching_sha2_password
+mysql_watchtower_monitor_only: true
+mysql_data_dir: /srv/mysql/data
+mysql_stop_grace_period: 120s
+
+mysql_managed_host_paths:
+  - path: "{{ mysql_data_dir }}"
+    owner: "999"
+    group: "999"
+    mode: "0750"
+    recurse_owner_group: true

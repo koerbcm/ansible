@@ -1,0 +1,14 @@
+---
+- name: Uptime Kuma monitor and taxonomy audit
+  hosts: maintenance_hosts
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Run Uptime Kuma monitor audit role
+      ansible.builtin.include_role:
+        name: uptime_kuma_monitor_audit
+      run_once: true
+      tags:
+        - uptime-kuma
+        - uptime-kuma-audit
+        - monitoring

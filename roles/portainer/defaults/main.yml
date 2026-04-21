@@ -1,0 +1,15 @@
+---
+portainer_enabled: false
+portainer_project_name: portainer
+portainer_project_dir: "{{ homelab_stack_root }}/portainer"
+portainer_compose_file: compose.yml
+portainer_image: portainer/portainer-ce:lts
+portainer_container_name: portainer
+portainer_service_name: portainer
+portainer_data_dir: ""
+portainer_edge_port: 8000
+portainer_https_port: 9443
+portainer_log_driver: gelf
+portainer_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"

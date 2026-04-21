@@ -1,0 +1,157 @@
+---
+- name: Validate Nextcloud configuration
+  ansible.builtin.assert:
+    that:
+      - nextcloud_project_dir | length > 0
+      - nextcloud_compose_file | length > 0
+      - nextcloud_image | length > 0
+      - nextcloud_container_name | length > 0
+      - nextcloud_service_name | length > 0
+      - nextcloud_html_dir | length > 0
+      - nextcloud_data_dir | length > 0
+      - nextcloud_data_dir_in_container | length > 0
+      - nextcloud_published_port | int > 0
+      - nextcloud_mysql_host | length > 0
+      - nextcloud_mysql_database | length > 0
+      - nextcloud_mysql_user | length > 0
+      - nextcloud_mysql_password | length > 0
+      - nextcloud_admin_user | length > 0
+      - nextcloud_admin_password | length > 0
+      - nextcloud_redis_image | length > 0
+      - nextcloud_redis_container_name | length > 0
+      - nextcloud_redis_service_name | length > 0
+      - nextcloud_redis_volume_name | length > 0
+      - nextcloud_mail_domain | length > 0
+      - nextcloud_smtp_host | length > 0
+      - nextcloud_smtp_name | length > 0
+      - nextcloud_smtp_password | length > 0
+      - nextcloud_trusted_domains | length > 0
+      - nextcloud_trusted_proxies | length > 0
+      - nextcloud_overwrite_cli_url | length > 0
+    fail_msg: "Nextcloud requires project settings, storage, database credentials, SMTP settings, and trusted domain settings."
+    success_msg: "Nextcloud configuration is valid."
+  when: nextcloud_enabled | bool
+
+- name: Ensure Nextcloud project directory exists
+  ansible.builtin.file:
+    path: "{{ nextcloud_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: nextcloud_enabled | bool
+
+- name: Ensure Nextcloud storage directories exist
+  ansible.builtin.file:
+    path: "{{ nextcloud_storage_dir }}"
+    state: directory
+  loop:
+    - "{{ nextcloud_html_dir }}"
+    - "{{ nextcloud_data_dir }}"
+  loop_control:
+    loop_var: nextcloud_storage_dir
+  when: nextcloud_enabled | bool
+
+- name: Render Nextcloud compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/nextcloud.compose.yml.j2"
+    dest: "{{ nextcloud_project_dir }}/{{ nextcloud_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: nextcloud_enabled | bool
+
+- name: Inspect existing Nextcloud container
+  community.docker.docker_container_info:
+    name: "{{ nextcloud_container_name }}"
+  register: nextcloud_existing_container
+  when: nextcloud_enabled | bool
+
+- name: Inspect existing Nextcloud Redis container
+  community.docker.docker_container_info:
+    name: "{{ nextcloud_redis_container_name }}"
+  register: nextcloud_existing_redis_container
+  when: nextcloud_enabled | bool
+
+- name: Determine whether Nextcloud needs one-time compose adoption
+  ansible.builtin.set_fact:
+    nextcloud_needs_adoption: >-
+      {{
+        (nextcloud_existing_container.exists | default(false))
+        and
+        (
+          ((nextcloud_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != nextcloud_project_name
+          or
+          ((nextcloud_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != nextcloud_service_name
+        )
+      }}
+    nextcloud_redis_needs_adoption: >-
+      {{
+        (nextcloud_existing_redis_container.exists | default(false))
+        and
+        (
+          ((nextcloud_existing_redis_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != nextcloud_project_name
+          or
+          ((nextcloud_existing_redis_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != nextcloud_redis_service_name
+        )
+      }}
+  when: nextcloud_enabled | bool
+
+- name: Note Nextcloud one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Nextcloud or Redis container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - nextcloud_enabled | bool
+    - ansible_check_mode
+    - nextcloud_needs_adoption | default(false) or nextcloud_redis_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Nextcloud container
+  community.docker.docker_container:
+    name: "{{ nextcloud_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - nextcloud_enabled | bool
+    - not ansible_check_mode
+    - nextcloud_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Nextcloud Redis container
+  community.docker.docker_container:
+    name: "{{ nextcloud_redis_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - nextcloud_enabled | bool
+    - not ansible_check_mode
+    - nextcloud_redis_needs_adoption | default(false)
+
+- name: Deploy Nextcloud with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ nextcloud_project_name }}"
+    project_src: "{{ nextcloud_project_dir }}"
+    files:
+      - "{{ nextcloud_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: nextcloud_compose_result
+  when:
+    - nextcloud_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Nextcloud compose actions
+  ansible.builtin.debug:
+    var: nextcloud_compose_result.actions
+  when:
+    - nextcloud_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Nextcloud compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Nextcloud docker compose deployment."
+  when:
+    - nextcloud_enabled | bool
+    - ansible_check_mode

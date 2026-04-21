@@ -1,0 +1,14 @@
+---
+sonarr_enabled: false
+sonarr_project_name: sonarr
+sonarr_project_dir: "{{ homelab_stack_root }}/sonarr"
+sonarr_compose_file: compose.yml
+sonarr_image: lscr.io/linuxserver/sonarr:latest
+sonarr_container_name: sonarr
+sonarr_service_name: sonarr
+sonarr_config_dir: ""
+sonarr_library_dir: /mnt/plexLibrary
+sonarr_downloads_dir: /mnt/plexStaging
+sonarr_published_port: 38082
+sonarr_puid: 1000
+sonarr_pgid: 1000

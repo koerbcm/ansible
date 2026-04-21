@@ -1,0 +1,11 @@
+[Unit]
+Description=Graylog datanode snapshot
+After=docker.service
+Requires=docker.service
+{% if homelab_failure_notify_enabled | default(false) | bool %}
+OnFailure={{ homelab_failure_notify_unit_name | default('homelab-unit-failure@') }}%n.service
+{% endif %}
+
+[Service]
+Type=oneshot
+ExecStart={{ graylog_backup_scripts_dir }}/graylog-datanode-snapshot.sh

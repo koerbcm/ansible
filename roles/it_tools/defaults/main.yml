@@ -1,0 +1,13 @@
+---
+it_tools_enabled: false
+it_tools_project_name: it-tools
+it_tools_project_dir: "{{ homelab_stack_root }}/it-tools"
+it_tools_compose_file: compose.yml
+it_tools_image: corentinth/it-tools
+it_tools_container_name: it-tools
+it_tools_service_name: it-tools
+it_tools_published_port: 8070
+it_tools_log_driver: gelf
+it_tools_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"

@@ -1,0 +1,11 @@
+---
+- name: Storage and backup cleanup audit
+  hosts: maintenance_hosts
+  become: true
+  serial: 1
+  roles:
+    - role: storage_audit
+      tags:
+        - storage-audit
+        - cleanup-audit
+        - cleanup

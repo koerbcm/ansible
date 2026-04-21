@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="{{ postgresql_backup_root }}"
+POSTGRES_CONTAINER="{{ postgresql_backup_container_name }}"
+DEST_DIR="${BACKUP_ROOT}/$(date +%F-%H%M%S)"
+
+mkdir -p "${DEST_DIR}"
+
+docker exec "${POSTGRES_CONTAINER}" sh -lc \
+  'export PGPASSWORD="$POSTGRES_PASSWORD"; exec pg_dumpall -U "$POSTGRES_USER"' \
+  | gzip > "${DEST_DIR}/postgresql-all-databases.sql.gz"
+
+find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ postgresql_backup_retention_days }} -exec rm -rf {} +

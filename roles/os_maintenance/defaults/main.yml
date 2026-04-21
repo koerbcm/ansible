@@ -1,0 +1,13 @@
+---
+os_maintenance_enabled: true
+os_maintenance_upgrade: true
+os_maintenance_upgrade_type: dist
+os_maintenance_upgrade_retries: 3
+os_maintenance_upgrade_retry_delay: 120
+os_maintenance_autoremove: true
+os_maintenance_autoclean: true
+os_maintenance_reboot: true
+os_maintenance_reboot_timeout: 900
+os_maintenance_post_reboot_delay: 20
+os_maintenance_check_docker: true
+os_maintenance_report_failed_units: true

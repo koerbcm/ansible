@@ -1,0 +1,8 @@
+---
+postgresql_backup_enabled: false
+
+postgresql_backup_scripts_dir: /usr/local/bin
+postgresql_backup_root: /mnt/backups/postgresql
+postgresql_backup_container_name: postgresql
+postgresql_backup_retention_days: 60
+postgresql_backup_on_calendar: "*-*-* 01:45:00"

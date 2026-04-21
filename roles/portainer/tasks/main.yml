@@ -1,0 +1,106 @@
+---
+- name: Validate Portainer configuration
+  ansible.builtin.assert:
+    that:
+      - portainer_project_dir | length > 0
+      - portainer_compose_file | length > 0
+      - portainer_image | length > 0
+      - portainer_container_name | length > 0
+      - portainer_service_name | length > 0
+      - portainer_data_dir | length > 0
+      - portainer_edge_port | int > 0
+      - portainer_https_port | int > 0
+    fail_msg: "Portainer requires project settings, data dir, and published ports."
+    success_msg: "Portainer configuration is valid."
+  when: portainer_enabled | bool
+
+- name: Ensure Portainer project directory exists
+  ansible.builtin.file:
+    path: "{{ portainer_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: portainer_enabled | bool
+
+- name: Ensure Portainer data directory exists
+  ansible.builtin.file:
+    path: "{{ portainer_data_dir }}"
+    state: directory
+  when: portainer_enabled | bool
+
+- name: Render Portainer compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/portainer.compose.yml.j2"
+    dest: "{{ portainer_project_dir }}/{{ portainer_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: portainer_enabled | bool
+
+- name: Inspect existing Portainer container
+  community.docker.docker_container_info:
+    name: "{{ portainer_container_name }}"
+  register: portainer_existing_container
+  when: portainer_enabled | bool
+
+- name: Determine whether Portainer needs one-time compose adoption
+  ansible.builtin.set_fact:
+    portainer_needs_adoption: >-
+      {{
+        (portainer_existing_container.exists | default(false))
+        and
+        (
+          ((portainer_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != portainer_project_name
+          or
+          ((portainer_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != portainer_service_name
+        )
+      }}
+  when: portainer_enabled | bool
+
+- name: Note Portainer one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Portainer container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - portainer_enabled | bool
+    - ansible_check_mode
+    - portainer_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Portainer container
+  community.docker.docker_container:
+    name: "{{ portainer_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - portainer_enabled | bool
+    - not ansible_check_mode
+    - portainer_needs_adoption | default(false)
+
+- name: Deploy Portainer with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ portainer_project_name }}"
+    project_src: "{{ portainer_project_dir }}"
+    files:
+      - "{{ portainer_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: portainer_compose_result
+  when:
+    - portainer_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Portainer compose actions
+  ansible.builtin.debug:
+    var: portainer_compose_result.actions
+  when:
+    - portainer_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Portainer compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Portainer docker compose deployment."
+  when:
+    - portainer_enabled | bool
+    - ansible_check_mode

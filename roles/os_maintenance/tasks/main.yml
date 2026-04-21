@@ -1,0 +1,135 @@
+---
+- name: Validate OS maintenance support
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == "Debian"
+    fail_msg: "OS maintenance currently supports Debian-family hosts only."
+    success_msg: "OS maintenance is supported on {{ inventory_hostname }}."
+  when: os_maintenance_enabled | bool
+
+- name: Refresh apt package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: "{{ base_apt_cache_valid_time | default(3600) }}"
+    lock_timeout: "{{ base_apt_lock_timeout | default(300) }}"
+  when:
+    - os_maintenance_enabled | bool
+    - ansible_os_family == "Debian"
+
+- name: Apply apt upgrades
+  ansible.builtin.apt:
+    upgrade: "{{ os_maintenance_upgrade_type }}"
+    dpkg_options: force-confdef,force-confold
+    lock_timeout: "{{ base_apt_lock_timeout | default(300) }}"
+  register: os_maintenance_apt_upgrade
+  until: os_maintenance_apt_upgrade is succeeded
+  retries: "{{ os_maintenance_upgrade_retries }}"
+  delay: "{{ os_maintenance_upgrade_retry_delay }}"
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_upgrade | bool
+    - ansible_os_family == "Debian"
+
+- name: Autoremove unused apt packages
+  ansible.builtin.apt:
+    autoremove: true
+    lock_timeout: "{{ base_apt_lock_timeout | default(300) }}"
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_autoremove | bool
+    - ansible_os_family == "Debian"
+
+- name: Autoclean apt package cache
+  ansible.builtin.apt:
+    autoclean: true
+    lock_timeout: "{{ base_apt_lock_timeout | default(300) }}"
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_autoclean | bool
+    - ansible_os_family == "Debian"
+
+- name: Check whether a reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: os_maintenance_reboot_required
+  when: os_maintenance_enabled | bool
+
+- name: Read reboot-required package list
+  ansible.builtin.command:
+    cmd: cat /var/run/reboot-required.pkgs
+  register: os_maintenance_reboot_packages
+  changed_when: false
+  failed_when: false
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_reboot_required.stat.exists | default(false)
+
+- name: Report reboot-required packages
+  ansible.builtin.debug:
+    msg: "{{ os_maintenance_reboot_packages.stdout_lines | default([]) }}"
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_reboot_required.stat.exists | default(false)
+    - os_maintenance_reboot_packages.stdout_lines | default([]) | length > 0
+
+- name: Reboot host when required
+  ansible.builtin.reboot:
+    reboot_timeout: "{{ os_maintenance_reboot_timeout }}"
+    post_reboot_delay: "{{ os_maintenance_post_reboot_delay }}"
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_reboot | bool
+    - os_maintenance_reboot_required.stat.exists | default(false)
+
+- name: Check Docker containers after maintenance
+  ansible.builtin.command:
+    cmd: docker ps --no-trunc
+  register: os_maintenance_docker_ps
+  changed_when: false
+  failed_when: false
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_check_docker | bool
+
+- name: Report Docker containers after maintenance
+  ansible.builtin.debug:
+    var: os_maintenance_docker_ps.stdout_lines
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_check_docker | bool
+    - os_maintenance_docker_ps.rc | default(1) == 0
+
+- name: Check unhealthy Docker containers after maintenance
+  ansible.builtin.command:
+    cmd: docker ps --filter health=unhealthy --format {% raw %}'{{.Names}}\t{{.Status}}'{% endraw %}
+  register: os_maintenance_unhealthy_containers
+  changed_when: false
+  failed_when: false
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_check_docker | bool
+
+- name: Report unhealthy Docker containers after maintenance
+  ansible.builtin.debug:
+    var: os_maintenance_unhealthy_containers.stdout_lines
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_check_docker | bool
+    - os_maintenance_unhealthy_containers.stdout_lines | default([]) | length > 0
+
+- name: Check failed systemd units after maintenance
+  ansible.builtin.command:
+    cmd: systemctl --failed --no-pager --plain
+  register: os_maintenance_failed_units
+  changed_when: false
+  failed_when: false
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_report_failed_units | bool
+
+- name: Report failed systemd units after maintenance
+  ansible.builtin.debug:
+    var: os_maintenance_failed_units.stdout_lines
+  when:
+    - os_maintenance_enabled | bool
+    - os_maintenance_report_failed_units | bool

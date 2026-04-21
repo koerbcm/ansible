@@ -1,0 +1,10 @@
+---
+- name: Discover manual state on existing hosts
+  hosts: homelab
+  become: true
+  gather_facts: true
+  roles:
+    - role: discovery
+      tags:
+        - discovery
+        - audit

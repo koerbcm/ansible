@@ -1,0 +1,13 @@
+services:
+  {{ it_tools_service_name }}:
+    image: {{ it_tools_image | quote }}
+    container_name: {{ it_tools_container_name | quote }}
+    ports:
+      - "{{ it_tools_published_port }}:80"
+    restart: unless-stopped
+    logging:
+      driver: {{ it_tools_log_driver | quote }}
+      options:
+{% for key, value in it_tools_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}

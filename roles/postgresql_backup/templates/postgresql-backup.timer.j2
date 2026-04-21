@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule PostgreSQL backups
+
+[Timer]
+OnCalendar={{ postgresql_backup_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

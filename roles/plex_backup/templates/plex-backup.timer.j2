@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule Plex config backups
+
+[Timer]
+OnCalendar={{ plex_backup_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

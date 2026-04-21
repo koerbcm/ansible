@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+venv_ansible_playbook="${repo_root}/.venv/bin/ansible-playbook"
+
+if [[ -x "${venv_ansible_playbook}" ]]; then
+  exec "${venv_ansible_playbook}" "$@"
+fi
+
+echo "Warning: ${venv_ansible_playbook} not found, falling back to system ansible-playbook." >&2
+exec ansible-playbook "$@"

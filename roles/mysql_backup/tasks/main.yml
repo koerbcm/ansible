@@ -1,0 +1,62 @@
+---
+- name: Validate MySQL backup configuration
+  ansible.builtin.assert:
+    that:
+      - mysql_backup_scripts_dir | length > 0
+      - mysql_backup_root | length > 0
+      - mysql_backup_container_name | length > 0
+      - mysql_backup_on_calendar | length > 0
+    fail_msg: "MySQL backup requires script path, backup root, container name, and schedule."
+    success_msg: "MySQL backup configuration is valid."
+  when: mysql_backup_enabled | bool
+
+- name: Ensure MySQL backup directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ mysql_backup_scripts_dir }}"
+    - "{{ mysql_backup_root }}"
+  when: mysql_backup_enabled | bool
+
+- name: Install MySQL backup script
+  ansible.builtin.template:
+    src: mysql-backup.sh.j2
+    dest: "{{ mysql_backup_scripts_dir }}/mysql-backup.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: mysql_backup_enabled | bool
+
+- name: Install MySQL backup service unit
+  ansible.builtin.template:
+    src: mysql-backup.service.j2
+    dest: /etc/systemd/system/mysql-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: mysql_backup_enabled | bool
+
+- name: Install MySQL backup timer unit
+  ansible.builtin.template:
+    src: mysql-backup.timer.j2
+    dest: /etc/systemd/system/mysql-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: mysql_backup_enabled | bool
+
+- name: Reload systemd for MySQL backup units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: mysql_backup_enabled | bool
+
+- name: Ensure MySQL backup timer is enabled and started
+  ansible.builtin.systemd:
+    name: mysql-backup.timer
+    enabled: true
+    state: started
+  when: mysql_backup_enabled | bool

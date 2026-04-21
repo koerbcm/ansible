@@ -1,0 +1,227 @@
+---
+# Uptime Kuma monitoring source-of-truth (audit mode).
+# This does not mutate Kuma yet; it verifies drift and coverage.
+
+uptime_kuma_monitor_audit_enabled: true
+uptime_kuma_monitor_audit_check_unexpected_monitors: true
+uptime_kuma_monitor_audit_apply_mode: false
+uptime_kuma_monitor_audit_apply_create_missing_tags: true
+uptime_kuma_monitor_audit_apply_add_missing_required_tags: true
+uptime_kuma_monitor_audit_apply_enforce_maintenance_scope: true
+uptime_kuma_monitor_audit_apply_create_missing_monitors: false
+# Steady-state policy: UI-added monitors are reported as unexpected/backlog,
+# not automatically deleted. Enable prune only for intentional cleanup waves.
+uptime_kuma_monitor_audit_apply_delete_unexpected_monitors: false
+
+# Keep audit non-blocking while we converge.
+uptime_kuma_monitor_audit_fail_on_missing_tags: false
+uptime_kuma_monitor_audit_fail_on_missing_monitors: false
+uptime_kuma_monitor_audit_fail_on_monitor_tag_gaps: false
+uptime_kuma_monitor_audit_fail_on_maintenance_scope_gaps: false
+
+# Tag colors used if apply mode needs to create missing tags.
+uptime_kuma_monitor_audit_tag_colors:
+  docker1: "#D97706"
+  docker2: "#0EA5E9"
+  pi1: "#16A34A"
+  pi2: "#8B5CF6"
+  critical: "#DC2626"
+  important: "#2563EB"
+  best-effort: "#64748B"
+  external: "#F59E0B"
+  internal: "#10B981"
+  container: "#4F46E5"
+  backup: "#7C3AED"
+
+uptime_kuma_monitor_audit_expected_tags:
+  - docker1
+  - docker2
+  - pi1
+  - pi2
+  - critical
+  - important
+  - best-effort
+  - external
+  - internal
+  - container
+  - backup
+
+uptime_kuma_monitor_audit_expected_monitors:
+  - path_name: "External"
+  - path_name: "Internal"
+  - path_name: "Media"
+  - path_name: "Infrastructure"
+
+  - path_name: "External / Ombi"
+    required_tags: ["docker1", "important", "external"]
+  - path_name: "External / Paperless"
+    required_tags: ["docker1", "critical", "external"]
+  - path_name: "External / Nextcloud"
+    required_tags: ["docker1", "critical", "external"]
+  - path_name: "External / Ntfy"
+    required_tags: ["pi2", "important", "external"]
+  - path_name: "External / n8n"
+    required_tags: ["docker2", "critical", "external"]
+    create_payload:
+      name: "n8n"
+      type: http
+      url: "https://n8n.koerbcm.com"
+
+  - path_name: "Internal / Ombi"
+    required_tags: ["docker1", "important", "internal"]
+  - path_name: "Internal / Paperless"
+    required_tags: ["docker1", "critical", "internal"]
+  - path_name: "Internal / Graylog"
+    required_tags: ["docker1", "critical", "internal"]
+    create_payload:
+      name: "Graylog"
+      type: http
+      url: "http://docker1.kirby.lan:9000"
+  - path_name: "Internal / Ntfy"
+    required_tags: ["pi2", "important", "internal"]
+  - path_name: "Internal / n8n"
+    required_tags: ["docker2", "critical", "internal"]
+    create_payload:
+      name: "n8n"
+      type: http
+      url: "http://docker2.kirby.lan:5678"
+  - path_name: "Internal / Homepage"
+    required_tags: ["docker1", "important", "internal"]
+    create_payload:
+      name: "Homepage"
+      type: http
+      url: "http://docker1.kirby.lan:8080"
+  - path_name: "Internal / Portainer"
+    required_tags: ["docker1", "important", "internal"]
+    create_payload:
+      name: "Portainer"
+      type: http
+      url: "https://docker1.kirby.lan:9443"
+      ignoreTls: true
+  - path_name: "Internal / Plex"
+    required_tags: ["docker2", "important", "internal"]
+    create_payload:
+      name: "Plex"
+      type: port
+      hostname: "docker2.kirby.lan"
+      port: 32400
+  - path_name: "Internal / IT-Tools"
+    required_tags: ["docker1", "best-effort", "internal"]
+    create_payload:
+      name: "IT-Tools"
+      type: http
+      url: "http://docker1.kirby.lan:8070"
+  - path_name: "Internal / pfSense"
+    required_tags: ["critical", "internal"]
+  - path_name: "Windows Game Server"
+    required_tags: ["best-effort", "internal"]
+
+  - path_name: "Infrastructure / MySQL"
+    required_tags: ["docker1", "critical", "container"]
+    create_payload:
+      name: "MySQL"
+      type: port
+      hostname: "docker1.kirby.lan"
+      port: 3306
+  - path_name: "Infrastructure / Paperless Tika"
+    required_tags: ["docker1", "important", "container"]
+    create_payload:
+      name: "Paperless Tika"
+      type: http
+      url: "http://docker1.kirby.lan:9998"
+  - path_name: "Infrastructure / Paperless Gotenberg"
+    required_tags: ["docker1", "important", "container"]
+    create_payload:
+      name: "Paperless Gotenberg"
+      type: port
+      hostname: "docker1.kirby.lan"
+      port: 3300
+  - path_name: "Infrastructure / Netdata (docker1)"
+    required_tags: ["docker1", "important", "container"]
+    create_payload:
+      name: "Netdata (docker1)"
+      type: http
+      url: "http://docker1.kirby.lan:19999"
+  - path_name: "Infrastructure / Graylog Datanode"
+    required_tags: ["docker1", "critical", "container"]
+    create_payload:
+      name: "Graylog Datanode"
+      type: http
+      url: "http://docker1.kirby.lan:8999"
+      keyword: "\"status\":\"CONNECTED\""
+
+  - path_name: "Infrastructure / PostgreSQL"
+    required_tags: ["docker2", "critical", "container"]
+    create_payload:
+      name: "PostgreSQL"
+      type: port
+      hostname: "docker2.kirby.lan"
+      port: 5432
+  - path_name: "Infrastructure / Portainer Agent (docker2)"
+    required_tags: ["docker2", "important", "container"]
+    create_payload:
+      name: "Portainer Agent (docker2)"
+      type: port
+      hostname: "docker2.kirby.lan"
+      port: 9001
+  - path_name: "Infrastructure / Netdata (docker2)"
+    required_tags: ["docker2", "important", "container"]
+    create_payload:
+      name: "Netdata (docker2)"
+      type: http
+      url: "http://docker2.kirby.lan:19999"
+
+  - path_name: "Infrastructure / Portainer Agent (pi1)"
+    required_tags: ["pi1", "important", "container"]
+    create_payload:
+      name: "Portainer Agent (pi1)"
+      type: port
+      hostname: "pi1.kirby.lan"
+      port: 9001
+
+  - path_name: "Infrastructure / Portainer Agent (pi2)"
+    required_tags: ["pi2", "important", "container"]
+    create_payload:
+      name: "Portainer Agent (pi2)"
+      type: port
+      hostname: "pi2.kirby.lan"
+      port: 9001
+
+  - path_name: "Media / Radarr"
+    required_tags: ["pi1", "important", "internal"]
+    create_payload:
+      name: "Radarr"
+      type: http
+      url: "http://pi1.kirby.lan:38081"
+  - path_name: "Media / Sonarr"
+    required_tags: ["pi1", "important", "internal"]
+    create_payload:
+      name: "Sonarr"
+      type: http
+      url: "http://pi1.kirby.lan:38082"
+  - path_name: "Media / Sabnzbd"
+    required_tags: ["pi1", "important", "internal"]
+    create_payload:
+      name: "Sabnzbd"
+      type: http
+      url: "http://sabnzbd.kirby.lan"
+  - path_name: "Media / LazyLibrarian"
+    required_tags: ["pi1", "best-effort", "internal"]
+    create_payload:
+      name: "LazyLibrarian"
+      type: http
+      url: "http://pi1.kirby.lan:38084"
+
+uptime_kuma_monitor_audit_expected_maintenance_scopes:
+  - title: "Ansible Planned Maintenance"
+    expected_monitor_path_names:
+      - "External"
+      - "Internal"
+      - "Media"
+      - "Infrastructure"
+  - title: "Docker Container Updates"
+    expected_monitor_path_names:
+      - "External"
+      - "Internal"
+      - "Media"
+      - "Infrastructure"

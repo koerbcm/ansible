@@ -1,0 +1,24 @@
+---
+identity_client_enabled: true
+identity_client_domain_name: home.lab
+identity_client_sssd_services:
+  - nss
+  - pam
+identity_client_sssd_domains:
+  - name: home.lab
+    options:
+      ldap_tls_reqcert: never
+      id_provider: ldap
+      auth_provider: ldap
+      chpass_provider: ldap
+      sudo_provider: ldap
+      autofs_provider: ldap
+      resolver_provider: ldap
+      access_provider: permit
+      ldap_uri: ldap://10.27.27.9
+      ldap_search_base: dc=home,dc=lab
+      ldap_default_bind_dn: uid=root,cn=users,dc=home,dc=lab
+      ldap_default_authtok_type: obfuscated_password
+      ldap_default_authtok: "{{ identity_client_ldap_default_authtok }}"
+      cache_credentials: true
+      use_fully_qualified_names: false

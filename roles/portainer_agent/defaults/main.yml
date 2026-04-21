@@ -1,0 +1,7 @@
+---
+portainer_agent_enabled: false
+portainer_agent_project_name: portainer-agent
+portainer_agent_project_dir: "{{ homelab_stack_root }}/portainer-agent"
+portainer_agent_compose_file: compose.yml
+portainer_agent_image: portainer/agent:lts
+portainer_agent_published_port: 9001

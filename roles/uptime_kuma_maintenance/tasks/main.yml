@@ -1,0 +1,300 @@
+---
+- name: Validate Uptime Kuma maintenance state
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_maintenance_state in ['start', 'end']
+    fail_msg: "uptime_kuma_maintenance_state must be 'start' or 'end'."
+  when: uptime_kuma_maintenance_enabled | bool
+
+- name: Validate Uptime Kuma maintenance mode
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_maintenance_mode in ['command', 'api', 'socket']
+    fail_msg: "uptime_kuma_maintenance_mode must be 'command', 'api', or 'socket'."
+  when: uptime_kuma_maintenance_enabled | bool
+
+- name: Validate Uptime Kuma maintenance command
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_maintenance_start_command | length > 0
+    fail_msg: "Set uptime_kuma_maintenance_start_command when maintenance hooks are enabled."
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'command'
+    - uptime_kuma_maintenance_state == 'start'
+
+- name: Validate Uptime Kuma maintenance command
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_maintenance_end_command | length > 0
+    fail_msg: "Set uptime_kuma_maintenance_end_command when maintenance hooks are enabled."
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'command'
+    - uptime_kuma_maintenance_state == 'end'
+
+- name: Validate Uptime Kuma API settings
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_api_base_url | length > 0
+      - uptime_kuma_api_maintenance_id | string | length > 0
+      - >-
+        (
+          uptime_kuma_api_access_token | default('') | length > 0
+        ) or (
+          uptime_kuma_api_username | length > 0 and
+          uptime_kuma_api_password | length > 0
+        )
+    fail_msg: >-
+      Set uptime_kuma_api_base_url and uptime_kuma_api_maintenance_id for API mode,
+      plus either uptime_kuma_api_access_token or both uptime_kuma_api_username and uptime_kuma_api_password.
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'
+
+- name: Validate Uptime Kuma Socket settings
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_server_url | length > 0
+      - uptime_kuma_username | length > 0
+      - uptime_kuma_password | length > 0
+      - uptime_kuma_api_maintenance_id | string | length > 0
+    fail_msg: >-
+      Set uptime_kuma_server_url, uptime_kuma_username, uptime_kuma_password,
+      and uptime_kuma_api_maintenance_id for socket mode.
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'socket'
+
+- name: Check Uptime Kuma API reachability
+  ansible.builtin.uri:
+    url: "{{ (uptime_kuma_api_base_url | regex_replace('/+$', '')) ~ '/info' }}"
+    method: GET
+    headers:
+      Accept: application/json
+    return_content: true
+    timeout: "{{ uptime_kuma_maintenance_timeout }}"
+    validate_certs: "{{ uptime_kuma_api_validate_certs | bool }}"
+    status_code:
+      - 200
+      - 401
+      - 403
+      - 404
+  register: uptime_kuma_reachability_response
+  delegate_to: "{{ uptime_kuma_maintenance_delegate_host }}"
+  become: false
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'
+
+- name: Start Uptime Kuma maintenance window
+  ansible.builtin.command:
+    argv: "{{ uptime_kuma_maintenance_start_command }}"
+  vars:
+    ansible_command_timeout: "{{ uptime_kuma_maintenance_timeout }}"
+  environment: "{{ uptime_kuma_maintenance_environment }}"
+  delegate_to: "{{ uptime_kuma_maintenance_delegate_host }}"
+  become: false
+  no_log: "{{ uptime_kuma_maintenance_no_log | bool }}"
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'command'
+    - uptime_kuma_maintenance_state == 'start'
+
+- name: End Uptime Kuma maintenance window
+  ansible.builtin.command:
+    argv: "{{ uptime_kuma_maintenance_end_command }}"
+  vars:
+    ansible_command_timeout: "{{ uptime_kuma_maintenance_timeout }}"
+  environment: "{{ uptime_kuma_maintenance_environment }}"
+  delegate_to: "{{ uptime_kuma_maintenance_delegate_host }}"
+  become: false
+  no_log: "{{ uptime_kuma_maintenance_no_log | bool }}"
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'command'
+    - uptime_kuma_maintenance_state == 'end'
+
+- name: Verify Uptime Kuma socket client dependency
+  ansible.builtin.command:
+    argv:
+      - "{{ uptime_kuma_socket_python }}"
+      - -c
+      - "import uptime_kuma_api"
+  register: uptime_kuma_socket_dependency_check
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ uptime_kuma_maintenance_delegate_host }}"
+  become: false
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'socket'
+
+- name: Validate Uptime Kuma socket client dependency
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_socket_dependency_check.rc == 0
+    fail_msg: >-
+      Uptime Kuma socket dependency check failed using {{ uptime_kuma_socket_python }}.
+      Install a compatible client package in that interpreter environment:
+      pip install uptime-kuma-api-v2
+      stderr={{ uptime_kuma_socket_dependency_check.stderr | default('') | trim }}
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'socket'
+
+- name: Apply Uptime Kuma maintenance state via Socket API
+  ansible.builtin.command:
+    argv:
+      - "{{ uptime_kuma_socket_python }}"
+      - "{{ uptime_kuma_socket_script_path }}"
+      - maintenance
+      - --server-url
+      - "{{ uptime_kuma_server_url }}"
+      - --username
+      - "{{ uptime_kuma_username }}"
+      - --password
+      - "{{ uptime_kuma_password }}"
+      - --maintenance-id
+      - "{{ uptime_kuma_api_maintenance_id | string }}"
+      - --state
+      - "{{ uptime_kuma_maintenance_state }}"
+  vars:
+    ansible_command_timeout: "{{ uptime_kuma_maintenance_timeout }}"
+  register: uptime_kuma_socket_action_response
+  changed_when: false
+  failed_when: false
+  environment: "{{ uptime_kuma_maintenance_environment }}"
+  delegate_to: "{{ uptime_kuma_maintenance_delegate_host }}"
+  become: false
+  no_log: "{{ uptime_kuma_maintenance_no_log | bool }}"
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'socket'
+
+- name: Validate Uptime Kuma maintenance action via Socket API
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_socket_action_response.rc == 0
+    fail_msg: >-
+      Uptime Kuma socket maintenance action failed
+      (state={{ uptime_kuma_maintenance_state }}, maintenance_id={{ uptime_kuma_api_maintenance_id }},
+      rc={{ uptime_kuma_socket_action_response.rc | default('n/a') }}).
+      stderr={{ uptime_kuma_socket_action_response.stderr | default('') | trim }}
+      stdout={{ uptime_kuma_socket_action_response.stdout | default('') | trim }}
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'socket'
+
+- name: Request Uptime Kuma API access token
+  ansible.builtin.uri:
+    url: "{{ (uptime_kuma_api_base_url | regex_replace('/+$', '')) ~ uptime_kuma_api_auth_path }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ uptime_kuma_api_username }}"
+      password: "{{ uptime_kuma_api_password }}"
+    headers:
+      Accept: application/json
+    return_content: true
+    timeout: "{{ uptime_kuma_maintenance_timeout }}"
+    validate_certs: "{{ uptime_kuma_api_validate_certs | bool }}"
+    status_code:
+      - 200
+      - 400
+      - 401
+      - 404
+      - 422
+    follow_redirects: all
+  register: uptime_kuma_auth_response
+  delegate_to: "{{ uptime_kuma_maintenance_delegate_host }}"
+  become: false
+  no_log: true
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'
+    - uptime_kuma_api_access_token | default('') | length == 0
+
+- name: Validate Uptime Kuma API login
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_auth_response.status == 200
+      - uptime_kuma_auth_response.json.access_token is defined
+      - uptime_kuma_auth_response.json.access_token | length > 0
+    fail_msg: >-
+      Uptime Kuma API login failed (status={{ uptime_kuma_auth_response.status | default('n/a') }}).
+      Response={{ uptime_kuma_auth_response.json | default(uptime_kuma_auth_response.content | default('no response body')) }}
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'
+    - uptime_kuma_api_access_token | default('') | length == 0
+
+- name: Set Uptime Kuma access token from static variable
+  ansible.builtin.set_fact:
+    uptime_kuma_effective_access_token: "{{ uptime_kuma_api_access_token | regex_replace('^Bearer\\s+', '') }}"
+  no_log: true
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'
+    - uptime_kuma_api_access_token | default('') | length > 0
+
+- name: Set Uptime Kuma access token from login response
+  ansible.builtin.set_fact:
+    uptime_kuma_effective_access_token: "{{ uptime_kuma_auth_response.json.access_token }}"
+  no_log: true
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'
+    - uptime_kuma_api_access_token | default('') | length == 0
+
+- name: Build Uptime Kuma action path
+  ansible.builtin.set_fact:
+    uptime_kuma_maintenance_action_path: >-
+      {{
+        (
+          uptime_kuma_api_resume_path_template
+          if uptime_kuma_maintenance_state == 'start'
+          else uptime_kuma_api_pause_path_template
+        ) | replace('{maintenance_id}', uptime_kuma_api_maintenance_id | string)
+      }}
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'
+
+- name: Apply Uptime Kuma maintenance state via API
+  ansible.builtin.uri:
+    url: "{{ (uptime_kuma_api_base_url | regex_replace('/+$', '')) ~ uptime_kuma_maintenance_action_path }}"
+    method: POST
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ uptime_kuma_effective_access_token }}"
+    return_content: true
+    timeout: "{{ uptime_kuma_maintenance_timeout }}"
+    validate_certs: "{{ uptime_kuma_api_validate_certs | bool }}"
+    status_code:
+      - 200
+      - 204
+      - 400
+      - 401
+      - 404
+      - 422
+  register: uptime_kuma_action_response
+  delegate_to: "{{ uptime_kuma_maintenance_delegate_host }}"
+  become: false
+  no_log: "{{ uptime_kuma_maintenance_no_log | bool }}"
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'
+
+- name: Validate Uptime Kuma maintenance action
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_action_response.status in [200, 204]
+    fail_msg: >-
+      Uptime Kuma maintenance action failed
+      (state={{ uptime_kuma_maintenance_state }}, maintenance_id={{ uptime_kuma_api_maintenance_id }},
+      status={{ uptime_kuma_action_response.status | default('n/a') }}).
+      Response={{ uptime_kuma_action_response.json | default(uptime_kuma_action_response.content | default('no response body')) }}
+  when:
+    - uptime_kuma_maintenance_enabled | bool
+    - uptime_kuma_maintenance_mode == 'api'

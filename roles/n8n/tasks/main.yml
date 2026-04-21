@@ -1,0 +1,173 @@
+---
+- name: Validate n8n configuration
+  ansible.builtin.assert:
+    that:
+      - n8n_project_name | length > 0
+      - n8n_project_dir | length > 0
+      - n8n_compose_file | length > 0
+      - n8n_env_file | length > 0
+      - n8n_image | length > 0
+      - n8n_container_name | length > 0
+      - n8n_service_name | length > 0
+      - n8n_container_user | length > 0
+      - n8n_published_port | int > 0
+      - n8n_data_dir | length > 0
+      - n8n_db_type | length > 0
+      - n8n_db_host | length > 0
+      - n8n_db_database | length > 0
+      - n8n_db_user | length > 0
+      - n8n_db_password | length > 0
+      - n8n_host | length > 0
+      - n8n_protocol | length > 0
+      - n8n_webhook_url | length > 0
+      - n8n_timezone | length > 0
+      - n8n_smtp_host | length > 0
+      - n8n_smtp_user | length > 0
+      - n8n_smtp_pass | length > 0
+      - n8n_smtp_sender | length > 0
+    fail_msg: "n8n requires project settings, local storage, database settings, and SMTP settings."
+    success_msg: "n8n configuration is valid."
+  when: n8n_enabled | bool
+
+- name: Ensure n8n project directory exists
+  ansible.builtin.file:
+    path: "{{ n8n_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: n8n_enabled | bool
+
+- name: Validate n8n managed host paths
+  ansible.builtin.assert:
+    that:
+      - item.path | length > 0
+      - item.owner is defined
+      - item.group is defined
+    fail_msg: "Each n8n managed host path needs path, owner, and group."
+  loop: "{{ n8n_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: n8n_enabled | bool
+
+- name: Ensure n8n managed host paths exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop: "{{ n8n_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: n8n_enabled | bool
+
+- name: Ensure n8n managed host path ownership is recursive
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    recurse: true
+  loop: "{{ n8n_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - n8n_enabled | bool
+    - item.recurse_owner_group | default(false)
+
+- name: Render n8n compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/n8n.compose.yml.j2"
+    dest: "{{ n8n_project_dir }}/{{ n8n_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: n8n_enabled | bool
+
+- name: Render n8n environment file
+  ansible.builtin.template:
+    src: n8n.env.j2
+    dest: "{{ n8n_project_dir }}/{{ n8n_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: n8n_enabled | bool
+
+- name: Inspect existing n8n container
+  community.docker.docker_container_info:
+    name: "{{ n8n_container_name }}"
+  register: n8n_existing_container
+  when: n8n_enabled | bool
+
+- name: Determine whether n8n needs one-time compose adoption
+  ansible.builtin.set_fact:
+    n8n_needs_adoption: >-
+      {{
+        (n8n_existing_container.exists | default(false))
+        and
+        (
+          ((n8n_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != n8n_project_name
+          or
+          ((n8n_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != n8n_service_name
+        )
+      }}
+  when: n8n_enabled | bool
+
+- name: Note n8n one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing n8n container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - n8n_enabled | bool
+    - ansible_check_mode
+    - n8n_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone n8n container
+  community.docker.docker_container:
+    name: "{{ n8n_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - n8n_enabled | bool
+    - n8n_manage_runtime | bool
+    - not ansible_check_mode
+    - n8n_needs_adoption | default(false)
+
+- name: Deploy n8n with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ n8n_project_name }}"
+    project_src: "{{ n8n_project_dir }}"
+    files:
+      - "{{ n8n_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: n8n_compose_result
+  when:
+    - n8n_enabled | bool
+    - n8n_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Show n8n compose actions
+  ansible.builtin.debug:
+    var: n8n_compose_result.actions
+  when:
+    - n8n_enabled | bool
+    - n8n_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Note n8n render-only mode
+  ansible.builtin.debug:
+    msg: "n8n compose and env were rendered, but runtime management is disabled."
+  when:
+    - n8n_enabled | bool
+    - not (n8n_manage_runtime | bool)
+
+- name: Skip n8n compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping n8n docker compose deployment."
+  when:
+    - n8n_enabled | bool
+    - n8n_manage_runtime | bool
+    - ansible_check_mode

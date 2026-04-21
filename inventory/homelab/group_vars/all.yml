@@ -1,0 +1,106 @@
+---
+timezone: America/Denver
+base_apt_force_ipv4: true
+
+homelab_failure_notify_enabled: true
+homelab_failure_notify_unit_name: homelab-unit-failure@
+homelab_failure_notify_ntfy_url: "{{ vault_homelab_failure_notify_ntfy_url | default('') }}"
+homelab_failure_notify_ntfy_token: "{{ vault_homelab_failure_notify_ntfy_token | default('') }}"
+
+base_packages:
+  - vim
+  - curl
+  - wget
+  - net-tools
+  - ca-certificates
+  - gnupg
+  - acl
+
+base_groups:
+  - name: koerbcm
+    gid: 1032
+
+base_users:
+  - name: koerbcm
+    uid: 1032
+    comment: Chris Koerber,,,
+    shell: /bin/bash
+    home: /home/koerbcm
+    groups:
+      - sudo
+    sudo: true
+    sudo_nopasswd: false
+    authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCw4zj7fAa2cowlQWnKWfrTyJ7QwL8apJgV4tBwz/niatpbLK2w4T9smhp0nkuizl8MfLP/T+KyX3s4K4kadE5jyM6xDN3/5678CUwJHS7E28tpjH6kSbI3UvxSOrXOfSpeGDtd9krOugHuOE0huUoeJhsD4HnOiChA6X5DYDeXf6DjizTBW0yYFWVg2CPnl25mLwJpNsnbUFIa0b50+wnBE7xdMViIlTaoTt/HYbGA59rcltZkWa/eL+XIJdtOM6fWi+G5knj1dmXvR7ieE5bv4/v40CkFLrMhPmx/mnJR9f+sUSn/5wcWksMqkoyqLrKB7sAfc+tO3Oe5tHvnFqsIlsjyYSHSh8muGCWp8AIraypICs1+Zq38tEAD5j4lqm2Cb8XcNbBzsu+Bf9bTZE36R8PXAUQXk3Oi+8/7BpsrdlYIX3Dg5qiWrkan9LgD8QaRYqqODGRcgMamHsk+0GwrjwdZmQX8u7oGBthMaHs+AACizZ5JPtYpB4j2b9muwRXRd4L/smiz5/5p/s9XonjrtOM5C2uvQwkaDfIuMLL0qrNyhA4PdChjjidwKLW9qVYPeEG1kFR4jD7ZOKGquOs9sonoSEhM3qBysvmbYAy3YkkHXPai2MhV6VtbBUAmt8Gwp61hHiIkYGcf8DQSj5w9HmVHFTn0CSEls/9UAqUG9Q== chris.koerber@developm3nt.com
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC60KzD/TyD9lZYHaSPUhdkcbyQ9k0Q/b0YCvZ9/OEK8aImivrEc5YqZrMbXRWYUMjbOIjdfUJp/F9yVGD2xLzljcU/SgZuzWHRzBedYWJbNxNRYqxOE9yK5acrutqwqddfCxtE+YifbynIU+YFJYi7t5ckFJ7eINKtBsJ5xLfOLjWOEAHK2IqFnokQUi4KuL4Q7UC82ZBYZ/GQgUL2gtrvdRqO72H/5MpDj1v14RpvX+OcLW2LQJBu3klwla8oIONkpwU1FTsXECf3iYlb7QI7ex0o1F+8bYIcO/ah6zz51qmD5y6/RH9Ilz6sCgXyqfLNZ2BHbT/t8YRWm0mIvL8y+n9/+0H86UUoQLvpOchkfH6UnfReHMOtpKLhb3H74EM3hVMSZBiA5huu5sXjPO2kB9pX868WEGxBUiZ3yXhNs1LrhGvk8p4R1RhrD7yU1ztRHcPP54EJvkeA+7+yTyW3AgHczTuwbMiJEhMp9Tr2O/8MBu1dSSx4T9HLw5uJ8EsngecvtIWtqhd8efgO6DdVlfzt+pScmmALt6uhXno/wN0YVJ2HGT8bkKJCKFsBDzRGBq/fSHVuKmyfXofh/C9eJjy8M8tOYE65475UcBdNEIC5IZUGjhlcfT0WnvwUWgiHaMNMRGuKXlyUZYI4Uk+BTLK2hu30g4Mw9jcvTBPX1w== koerbcm@winQAVKTC3
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDuRzZcXqUHnZLYe7+71Macn8NGMSqdw3E/lXE6Wy+iIRb6SmQlzTOiaWuaFDjN2gcyktxgTaTTCs7nlhenGz+AHAiKsWRDRGOanSQ89zvjV8cwUS+0DAbXvMUcN1Mvh7qhFyYxYQjU78tH/8HNxtvHc76yLrL7Ff5ea0MPlRu1/Z67CXhba84mb+Ayu/PYzZA89wiAUzi1OxJEj1ePLeewegL4DVUCDQ8rEIUm5Ti5ewv7NbkJCLnUsSUrhB6n80uFvi937+iUaGu8cpVLqJDGmPg1j7kUWmIz3N+MWlQ0QGcWV/HH3q6bpo87ObInpYRE5M0FiFdVLdfZJRIxGwJlQA2owiOWXBQoCeent2Ys56EZXqN+4aTru/WGxubCq26B75mdmqxVwJyBRkddejrUFAGnhw2uMIiPkBxO09lBS2NM8W/FovJDwEEObuAiDU1EaSFsnvQVxYN0SfwEnu9M+/4Nfk/6o8WMAEIpQLPeNeq2aolsLP4rmbWwjgMDpLZvlelcfnrplZ5UKPqZkAJw4aW1W+mtjHn4/P4bzxEMi/PPVxoA5xJ/kjBUzOIhcRLQu0pti0B0e/dq1GtIN12OXs4CCcTLJZgJqdh7gHvIsN8ZXxRtPwRyBS5w5eLupLhYwugeCyhWKuLPy9YHp8pGoDn2egcJwyI6MoqnC6Nk/Q== koerbcm@playful-steed
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCplWH6EsNYSN4MKmu6C5d8AuyCuvUTN9hwH9u/i9u0xcIOKCG5y6RADCiORZ9Um1APiuXrzBXvKZVeb1iLfIbnak4GujJ5JNT4i5Z8kfQ9Oj5DdYJXxjJOvk1zxmafdqmJfjL7gQ+3CfKhgZPZHb0WvTtUJTK/B9RlXdrwFsbT4GYJ3CwOEZeWQ/zk+h0oKc0TuQ/RIk4H1OLHXzhsxBN72xAUiuBda5hlz1ACWjrbuRQz+Q1ROfGvBxFj1rIxe1z3ACWOtGdtfcndCty7fNH4R8GbiFl6ToTy9/1T1Jk/BfBhE7uvIGgTppeiqWZzZjw8wQEz+5qq7H1Fv2LDfglG0ghtMJ7wvoLGvJRLvvjkuT6TvNaXwBKF/KY8p/ypC4dEWxTb/CsL1kw3NS9m8J+mQQ39AI9MoS9SGhdmr5Jmd19tPCj4vMS00wN7dr9SHlRIqLnThr9IQcKYCk/o4ti2N91JnaSoIMYaCIsB336aN0Tdx3rb0gtiVnqHgWc+ARc= koerbcm@docker1
+
+base_extra_users: []
+base_break_glass_users:
+  - koerbcm
+base_require_break_glass_passwords: true
+
+docker_admin_user: koerbcm
+docker_admin_users:
+  - koerbcm
+
+docker_gelf_address: "udp://10.27.70.11:12202"
+docker_dns_servers:
+  - "10.27.70.1"
+
+docker_cert_dir: /etc/docker/certs
+docker_override_dir: /etc/systemd/system/docker.service.d
+docker_override_file: /etc/systemd/system/docker.service.d/override.conf
+docker_service_execstart: "/usr/bin/dockerd --containerd=/run/containerd/containerd.sock"
+docker_daemon_hosts:
+  - "unix:///var/run/docker.sock"
+docker_tls_enabled: false
+docker_tls_verify: false
+docker_tls_san_ips: []
+docker_tls_subject_alt_names: []
+docker_server_cert_common_name: "{{ inventory_hostname }}"
+docker_cert_valid_days: 3650
+
+homelab_stack_root: /opt/stacks
+
+# Optional global pull policy for Compose-managed services.
+# Set at runtime for controlled refreshes, e.g.:
+# ansible-playbook playbooks/site.yml --limit docker1,docker2 --tags apps -e docker_compose_pull_policy=always
+
+# Optional local Uptime Kuma maintenance hooks.
+# Modes:
+# - socket: direct Kuma Socket.IO automation (recommended)
+# - api: legacy REST-wrapper mode
+# - command: local command arrays on the control node
+# Secret source note:
+# Uptime Kuma and Kuma API credentials live in 1Password item UUID:
+# v74gndaweoqmvoseo6s7zo3wvi
+uptime_kuma_maintenance_enabled: true
+uptime_kuma_maintenance_mode: socket
+uptime_kuma_maintenance_start_command: []
+uptime_kuma_maintenance_end_command: []
+# Direct Kuma Socket.IO settings
+uptime_kuma_server_url: "http://kuma.kirby.lan"
+uptime_kuma_username: "koerbcm"
+uptime_kuma_password: "{{ vault_uptime_kuma_password | default('') }}"
+# Legacy REST-wrapper settings (kept for compatibility if mode=api)
+uptime_kuma_api_base_url: "http://kuma-api.kirby.lan"
+uptime_kuma_api_username: "ansible-maint"
+uptime_kuma_api_password: "{{ vault_uptime_kuma_api_password | default('') }}"
+uptime_kuma_api_access_token: "{{ vault_uptime_kuma_api_access_token | default('') }}"
+uptime_kuma_api_secret_key: "{{ vault_uptime_kuma_api_secret_key | default('') }}"
+uptime_kuma_api_maintenance_id: "3"
+# Legacy wrapper path is /maintenance; develop branch is /maintenances.
+uptime_kuma_monitor_audit_api_maintenance_path: "/maintenance"
+uptime_kuma_api_validate_certs: true
+
+nfs_mounts: []
+
+ntfy_version: v2.21.0
+ntfy_arch_image_map:
+  armv7l: "binwiederhier/ntfy:{{ ntfy_version }}-armv7"
+  armv6l: "binwiederhier/ntfy:{{ ntfy_version }}-armv7"
+  aarch64: "binwiederhier/ntfy:{{ ntfy_version }}"
+  x86_64: "binwiederhier/ntfy:{{ ntfy_version }}"
+  default: "binwiederhier/ntfy:{{ ntfy_version }}"

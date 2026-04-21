@@ -1,0 +1,116 @@
+services:
+  mongodb:
+    image: {{ graylog_mongodb_image | quote }}
+    restart: "unless-stopped"
+    networks:
+      - graylog
+    volumes:
+      - {{ graylog_local_mongodb_data_dir | quote }}:/data/db
+      - {{ graylog_local_mongodb_config_dir | quote }}:/data/configdb
+    ports:
+      - "27017:27017"
+    stop_grace_period: {{ graylog_mongodb_stop_grace_period | quote }}
+    labels:
+      - com.centurylinklabs.watchtower.monitor-only=true
+
+  datanode:
+    image: "${DATANODE_IMAGE:-{{ graylog_datanode_image }}}"
+    hostname: "datanode"
+    environment:
+      GRAYLOG_DATANODE_OPENSEARCH_HEAP: {{ graylog_datanode_heap | quote }}
+      GRAYLOG_DATANODE_INSECURE_STARTUP: {{ graylog_datanode_insecure_startup | ternary('true', 'false') | quote }}
+      GRAYLOG_DATANODE_NODE_ID_FILE: "/var/lib/graylog-datanode/node-id"
+      GRAYLOG_DATANODE_ROOT_USERNAME: "${GRAYLOG_ROOT_USERNAME}"
+      GRAYLOG_DATANODE_PASSWORD_SECRET: "${GRAYLOG_PASSWORD_SECRET:?Please configure GRAYLOG_PASSWORD_SECRET in the .env file}"
+      GRAYLOG_DATANODE_MONGODB_URI: "mongodb://mongodb:27017/graylog"
+{% if graylog_datanode_override_config_enabled | bool %}
+      GRAYLOG_DATANODE_OPENSEARCH_CONFIGURATION_OVERRIDES_FILE: {{ graylog_datanode_override_config_container_path | quote }}
+{% endif %}
+    ulimits:
+      memlock:
+        hard: -1
+        soft: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "8999:8999/tcp"
+      - "9200:9200/tcp"
+      - "9300:9300/tcp"
+    networks:
+      - graylog
+    volumes:
+      - {{ graylog_local_datanode_dir | quote }}:/var/lib/graylog-datanode
+      - {{ graylog_backup_snapshot_root | quote }}:/mnt/backups
+      - {{ graylog_watchtower_hooks_dir | quote }}:/mnt/watchtower_hooks
+{% if graylog_datanode_override_config_enabled | bool %}
+      - {{ (graylog_datanode_override_config_dir ~ '/' ~ graylog_datanode_override_config_file) | quote }}:{{ graylog_datanode_override_config_container_path }}:ro
+{% endif %}
+    stop_grace_period: {{ graylog_datanode_stop_grace_period | quote }}
+    restart: "unless-stopped"
+    labels:
+      - com.centurylinklabs.watchtower.monitor-only=true
+
+  graylog:
+    hostname: "server"
+    image: "${GRAYLOG_IMAGE:-{{ graylog_image }}}"
+    depends_on:
+      mongodb:
+        condition: "service_started"
+      datanode:
+        condition: "service_started"
+    entrypoint: "/usr/bin/tini -- /docker-entrypoint.sh"
+    environment:
+      GRAYLOG_DATANODE_INSECURE_STARTUP: {{ graylog_datanode_insecure_startup | ternary('true', 'false') | quote }}
+      GRAYLOG_NODE_ID_FILE: "/usr/share/graylog/data/data/node-id"
+      GRAYLOG_ROOT_USERNAME: "${GRAYLOG_ROOT_USERNAME}"
+      GRAYLOG_PASSWORD_SECRET: "${GRAYLOG_PASSWORD_SECRET:?Please configure GRAYLOG_PASSWORD_SECRET in the .env file}"
+      GRAYLOG_ROOT_PASSWORD_SHA2: "${GRAYLOG_ROOT_PASSWORD_SHA2:?Please configure GRAYLOG_ROOT_PASSWORD_SHA2 in the .env file}"
+      GRAYLOG_HTTP_BIND_ADDRESS: "0.0.0.0:9000"
+      GRAYLOG_HTTP_EXTERNAL_URI: {{ graylog_http_external_uri | quote }}
+      GRAYLOG_MONGODB_URI: "mongodb://mongodb:27017/graylog"
+      GRAYLOG_TIMEZONE: {{ graylog_timezone | quote }}
+      TZ: {{ graylog_timezone | quote }}
+      GRAYLOG_ELASTICSEARCH_HOSTS: "http://datanode:9200"
+      GRAYLOG_TRANSPORT_EMAIL_PROTOCOL: "smtp"
+      GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL: {{ graylog_http_external_uri | quote }}
+      GRAYLOG_TRANSPORT_EMAIL_HOSTNAME: {{ graylog_transport_email_hostname | quote }}
+      GRAYLOG_TRANSPORT_EMAIL_ENABLED: "true"
+      GRAYLOG_TRANSPORT_EMAIL_PORT: {{ graylog_transport_email_port | quote }}
+      GRAYLOG_TRANSPORT_EMAIL_USE_AUTH: "true"
+      GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME: "${GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME}"
+      GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD: "${GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD}"
+      GRAYLOG_TRANSPORT_EMAIL_USE_TLS: "true"
+      GRAYLOG_TRANSPORT_EMAIL_USE_SSL: "false"
+      GRAYLOG_TRANSPORT_FROM_EMAIL: {{ graylog_transport_from_email | quote }}
+      GRAYLOG_TRANSPORT_SUBJECT_PREFIX: {{ graylog_transport_subject_prefix | quote }}
+      GRAYLOG_ALLOW_LEADING_WILDCARD_SEARCHES: "true"
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515/udp"
+      - "1518:1518/udp"
+      - "5044:5044/tcp"
+      - "5140:5140/udp"
+      - "5140:5140/tcp"
+      - "5555:5555/tcp"
+      - "5555:5555/udp"
+      - "9000:9000/tcp"
+      - "12201:12201/tcp"
+      - "12201:12201/udp"
+      - "12202:12202/tcp"
+      - "12202:12202/udp"
+      - "13301:13301/tcp"
+      - "13302:13302/tcp"
+    networks:
+      - graylog
+    volumes:
+      - {{ graylog_local_graylog_data_dir | quote }}:/usr/share/graylog/data/data
+      - {{ graylog_watchtower_hooks_dir | quote }}:/mnt/watchtower_hooks
+    stop_grace_period: {{ graylog_server_stop_grace_period | quote }}
+    restart: "unless-stopped"
+    labels:
+      - com.centurylinklabs.watchtower.monitor-only=true
+
+networks:
+  graylog:
+    driver: "bridge"

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="{{ app_config_backup_root }}"
+TIMESTAMP="$(date +%F-%H%M%S)"
+DEST_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
+
+mkdir -p "${DEST_DIR}"
+
+{% for item in app_config_backup_items %}
+if [[ -d {{ item.source | quote }} ]]; then
+  tar \
+{% for exclude in app_config_backup_excludes %}
+    --exclude={{ exclude | quote }} \
+{% endfor %}
+{% for exclude in item.excludes | default([]) %}
+    --exclude={{ exclude | quote }} \
+{% endfor %}
+    -C {{ item.source | quote }} \
+    -czf "${DEST_DIR}/{{ item.name }}.tar.gz" \
+    .
+else
+  echo "Skipping missing app config source: {{ item.source }}" >&2
+fi
+{% endfor %}
+
+find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ app_config_backup_retention_days }} -exec rm -rf {} +

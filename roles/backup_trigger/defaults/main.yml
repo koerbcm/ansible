@@ -1,0 +1,5 @@
+---
+maintenance_pre_backup_services: []
+backup_trigger_enabled: true
+backup_trigger_wait_retries: 180
+backup_trigger_wait_delay: 5

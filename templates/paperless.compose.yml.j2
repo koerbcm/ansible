@@ -1,0 +1,124 @@
+services:
+  {{ paperless_web_service_name }}:
+    image: {{ paperless_web_image | quote }}
+    ports:
+      - "{{ paperless_published_port }}:8000"
+    restart: unless-stopped
+    depends_on:
+      - {{ paperless_db_service_name }}
+      - {{ paperless_broker_service_name }}
+      - {{ paperless_gotenberg_service_name }}
+      - {{ paperless_tika_service_name }}
+    environment:
+      PAPERLESS_URL: {{ paperless_url | quote }}
+      PAPERLESS_SECRET_KEY: {{ paperless_secret_key | quote }}
+      PAPERLESS_CSRF_TRUSTED_ORIGINS: {{ paperless_csrf_trusted_origins | quote }}
+      PAPERLESS_DBHOST: {{ paperless_db_service_name | quote }}
+      PAPERLESS_REDIS: {{ ('redis://' ~ paperless_broker_service_name ~ ':6379') | quote }}
+      PAPERLESS_TIKA_ENABLED: {{ paperless_tika_enabled | quote }}
+      PAPERLESS_TIKA_ENDPOINT: {{ paperless_tika_endpoint | quote }}
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: {{ paperless_gotenberg_endpoint | quote }}
+      PAPERLESS_EMAIL_HOST: {{ paperless_email_host | quote }}
+      PAPERLESS_EMAIL_FROM: {{ paperless_email_from | quote }}
+      PAPERLESS_EMAIL_PORT: {{ paperless_email_port | string | quote }}
+      PAPERLESS_EMAIL_HOST_USER: {{ paperless_email_host_user | quote }}
+      PAPERLESS_EMAIL_USE_TLS: {{ paperless_email_use_tls | quote }}
+      USERMAP_UID: {{ paperless_usermap_uid | string | quote }}
+      USERMAP_GID: {{ paperless_usermap_gid | string | quote }}
+      PAPERLESS_FILENAME_FORMAT: {{ paperless_filename_format | quote }}
+      PAPERLESS_CONSUMER_RECURSIVE: {{ paperless_consumer_recursive | quote }}
+      PAPERLESS_CONSUMER_POLLING: {{ paperless_consumer_polling | quote }}
+      PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS: {{ paperless_consumer_subdirs_as_tags | quote }}
+      PAPERLESS_CONSUMER_IGNORE_PATTERNS: {{ paperless_consumer_ignore_patterns | quote }}
+      PAPERLESS_CONSUMER_DELETE_DUPLICATES: {{ paperless_consumer_delete_duplicates | quote }}
+      PAPERLESS_OCR_USER_ARGS: {{ paperless_ocr_user_args | quote }}
+{% if paperless_email_host_password | length > 0 %}
+      PAPERLESS_EMAIL_HOST_PASSWORD: {{ paperless_email_host_password | quote }}
+{% endif %}
+    volumes:
+      - {{ paperless_data_dir | quote }}:/usr/src/paperless/data
+      - {{ paperless_media_dir | quote }}:/usr/src/paperless/media
+      - {{ paperless_export_dir | quote }}:/usr/src/paperless/export
+      - {{ paperless_consume_dir | quote }}:/usr/src/paperless/consume
+    logging:
+      driver: {{ paperless_log_driver | quote }}
+      options:
+{% for key, value in paperless_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}
+{% if paperless_watchtower_monitor_only | bool %}
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+{% endif %}
+
+  {{ paperless_db_service_name }}:
+    image: {{ paperless_db_image | quote }}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ paperless_db_name | quote }}
+      POSTGRES_USER: {{ paperless_db_user | quote }}
+      POSTGRES_PASSWORD: {{ paperless_db_password | quote }}
+    volumes:
+      - {{ paperless_db_data_dir | quote }}:/var/lib/postgresql/data
+    logging:
+      driver: {{ paperless_log_driver | quote }}
+      options:
+{% for key, value in paperless_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}
+{% if paperless_watchtower_monitor_only | bool %}
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+{% endif %}
+
+  {{ paperless_broker_service_name }}:
+    image: {{ paperless_broker_image | quote }}
+    restart: unless-stopped
+    volumes:
+      - {{ paperless_redis_data_dir | quote }}:/data
+    logging:
+      driver: {{ paperless_log_driver | quote }}
+      options:
+{% for key, value in paperless_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}
+{% if paperless_watchtower_monitor_only | bool %}
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+{% endif %}
+
+  {{ paperless_gotenberg_service_name }}:
+    image: {{ paperless_gotenberg_image | quote }}
+    command:
+{% for arg in paperless_gotenberg_command %}
+      - {{ arg | quote }}
+{% endfor %}
+    ports:
+      - "{{ paperless_gotenberg_published_port }}:3000"
+    restart: unless-stopped
+    logging:
+      driver: {{ paperless_log_driver | quote }}
+      options:
+{% for key, value in paperless_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}
+{% if paperless_watchtower_monitor_only | bool %}
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+{% endif %}
+
+  {{ paperless_tika_service_name }}:
+    image: {{ paperless_tika_image | quote }}
+    ports:
+      - "{{ paperless_tika_published_port }}:9998"
+    restart: unless-stopped
+    logging:
+      driver: {{ paperless_log_driver | quote }}
+      options:
+{% for key, value in paperless_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}
+{% if paperless_watchtower_monitor_only | bool %}
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+{% endif %}

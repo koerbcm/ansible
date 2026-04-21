@@ -1,0 +1,24 @@
+---
+common_service_packages:
+  - avahi-daemon
+  - avahi-utils
+  - libnss-mdns
+  - rsyslog
+  - ufw
+
+common_service_units:
+  - name: avahi-daemon
+    enabled: true
+    state: started
+  - name: rsyslog
+    enabled: true
+    state: started
+  - name: ufw
+    enabled: false
+    state: stopped
+
+common_journald_enabled: true
+common_journald_settings:
+  SystemMaxUse: 200M
+  RuntimeMaxUse: 50M
+  MaxFileSec: 1month

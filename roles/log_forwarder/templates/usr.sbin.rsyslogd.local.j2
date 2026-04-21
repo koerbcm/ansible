@@ -1,0 +1,4 @@
+# Managed by Ansible: allow rsyslog imfile to read selected application log paths.
+{% for path in log_forwarder_apparmor_allow_paths %}
+{{ path }} r,
+{% endfor %}

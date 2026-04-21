@@ -1,0 +1,62 @@
+---
+- name: Validate PostgreSQL backup configuration
+  ansible.builtin.assert:
+    that:
+      - postgresql_backup_scripts_dir | length > 0
+      - postgresql_backup_root | length > 0
+      - postgresql_backup_container_name | length > 0
+      - postgresql_backup_on_calendar | length > 0
+    fail_msg: "PostgreSQL backup requires script path, backup root, container name, and schedule."
+    success_msg: "PostgreSQL backup configuration is valid."
+  when: postgresql_backup_enabled | bool
+
+- name: Ensure PostgreSQL backup directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ postgresql_backup_scripts_dir }}"
+    - "{{ postgresql_backup_root }}"
+  when: postgresql_backup_enabled | bool
+
+- name: Install PostgreSQL backup script
+  ansible.builtin.template:
+    src: postgresql-backup.sh.j2
+    dest: "{{ postgresql_backup_scripts_dir }}/postgresql-backup.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: postgresql_backup_enabled | bool
+
+- name: Install PostgreSQL backup service unit
+  ansible.builtin.template:
+    src: postgresql-backup.service.j2
+    dest: /etc/systemd/system/postgresql-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: postgresql_backup_enabled | bool
+
+- name: Install PostgreSQL backup timer unit
+  ansible.builtin.template:
+    src: postgresql-backup.timer.j2
+    dest: /etc/systemd/system/postgresql-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: postgresql_backup_enabled | bool
+
+- name: Reload systemd for PostgreSQL backup units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: postgresql_backup_enabled | bool
+
+- name: Ensure PostgreSQL backup timer is enabled and started
+  ansible.builtin.systemd:
+    name: postgresql-backup.timer
+    enabled: true
+    state: started
+  when: postgresql_backup_enabled | bool

@@ -1,0 +1,313 @@
+---
+nfs_mounts:
+  - path: /mnt/globalShare
+    src: 10.27.27.9:/volume1/globalShare
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/nextcloud
+    src: 10.27.27.9:/volume1/nextcloud
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/dockerVolumes
+    src: 10.27.27.9:/volume1/dockerVolumes
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/graylog
+    src: 10.27.27.9:/volume1/graylog
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/backups
+    src: 10.27.27.9:/volume1/backups
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+
+docker_tls_subject_alt_names:
+  - DNS:docker1
+  - DNS:docker1.kirby.lan
+
+log_forwarder_enabled: true
+log_forwarder_target: 10.27.70.11
+log_forwarder_port: 1518
+log_forwarder_protocol: udp
+log_forwarder_template: RSYSLOG_SyslogProtocol23Format
+
+graylog_enabled: true
+graylog_manage_runtime: true
+graylog_project_name: graylog7
+graylog_project_dir: /opt/stacks/graylog7
+graylog_root_username: gladmin
+graylog_datanode_override_config_enabled: true
+graylog_managed_host_paths:
+  - path: /srv/graylog/mongodb-data
+    owner: "999"
+    group: "999"
+    mode: "0750"
+    recurse_owner_group: true
+  - path: /srv/graylog/mongodb-config
+    owner: "999"
+    group: "999"
+    mode: "0750"
+    recurse_owner_group: true
+  - path: /srv/graylog/datanode
+    owner: "999"
+    group: "999"
+    mode: "0750"
+    recurse_owner_group: true
+  - path: /srv/graylog/graylog-data
+    owner: "1100"
+    group: "1100"
+    mode: "0750"
+    recurse_owner_group: true
+  - path: /mnt/backups/graylog/opensearch-snapshots
+    owner: "999"
+    group: "999"
+    mode: "0770"
+    recurse_owner_group: true
+
+graylog_backup_enabled: true
+graylog_backup_mongo_enabled: true
+graylog_backup_mongo_on_calendar: "*-*-* 01:00:00"
+graylog_backup_config_enabled: true
+graylog_backup_config_on_calendar: "*-*-* 01:15:00"
+graylog_backup_snapshot_enabled: true
+graylog_backup_snapshot_on_calendar: "Sun *-*-* 02:00:00"
+graylog_backup_config_source_dir: /opt/stacks/graylog7
+
+mysql_enabled: true
+mysql_manage_runtime: true
+mysql_project_name: mysql
+mysql_project_dir: /opt/stacks/mysql
+mysql_data_dir: /srv/mysql/data
+mysql_database: db
+mysql_app_user: koerbcm
+
+mysql_backup_enabled: true
+mysql_backup_on_calendar: "*-*-* 01:30:00"
+
+maintenance_pre_backup_services:
+  - graylog-backup-mongo.service
+  - graylog-backup-config.service
+  - graylog-datanode-snapshot.service
+  - mysql-backup.service
+
+watchtower_enabled: false
+watchtower_manage_runtime: false
+
+service_backlog:
+  - name: mysql-db-1
+    status: active
+    goal: migrate to local Ansible-managed storage and add real backups
+  - name: watchtower
+    status: disabled
+    goal: keep for later, but bring under Ansible in a disabled state first
+  - name: opencloud
+    status: not_working
+    goal: preserve as a later troubleshooting/migration target
+
+netdata_enabled: true
+netdata_project_name: netdata
+netdata_project_dir: /opt/stacks/netdata
+netdata_image: netdata/netdata:stable
+netdata_container_name: netdata
+netdata_service_name: netdata
+netdata_listener_port: 19999
+netdata_claim_url: https://app.netdata.cloud
+netdata_claim_rooms: cfa21087-dee5-4064-9de6-babda1d020f7
+netdata_claim_token: "{{ docker2_netdata_claim_token }}"
+netdata_config_volume_name: netdata_netdataconfig
+netdata_cache_volume_name: netdata_netdatacache
+netdata_lib_volume_name: netdata_netdatalib
+
+homepage_enabled: true
+homepage_project_name: homepage
+homepage_project_dir: /opt/stacks/homepage
+homepage_image: ghcr.io/gethomepage/homepage:latest
+homepage_container_name: homepage
+homepage_service_name: homepage
+homepage_config_dir: /mnt/dockerVolumes/docker1/homepage_data
+homepage_published_port: 8080
+homepage_puid: 1000
+homepage_pgid: 1000
+homepage_allowed_hosts: home.kirby.lan,10.27.70.11:8080
+homepage_log_driver: gelf
+homepage_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"
+
+ombi_enabled: true
+ombi_project_name: ombi
+ombi_project_dir: /opt/stacks/ombi
+ombi_image: lscr.io/linuxserver/ombi:latest
+ombi_container_name: ombi
+ombi_service_name: ombi
+ombi_config_dir: /mnt/dockerVolumes/docker1/ombi_data
+ombi_published_port: 3579
+ombi_puid: 1000
+ombi_pgid: 1000
+ombi_watchtower_depends_on: mysql-db-1
+
+it_tools_enabled: true
+it_tools_project_name: it-tools
+it_tools_project_dir: /opt/stacks/it-tools
+it_tools_image: corentinth/it-tools
+it_tools_container_name: it-tools
+it_tools_service_name: it-tools
+it_tools_published_port: 8070
+it_tools_log_driver: gelf
+it_tools_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"
+
+portainer_enabled: true
+portainer_project_name: portainer
+portainer_project_dir: /opt/stacks/portainer
+portainer_image: portainer/portainer-ce:lts
+portainer_container_name: portainer
+portainer_service_name: portainer
+portainer_data_dir: /mnt/dockerVolumes/docker1/portainer_data
+portainer_edge_port: 8000
+portainer_https_port: 9443
+portainer_log_driver: gelf
+portainer_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"
+
+nextcloud_enabled: true
+nextcloud_project_name: nextcloud
+nextcloud_project_dir: /opt/stacks/nextcloud
+nextcloud_image: nextcloud:latest
+nextcloud_container_name: nextcloud
+nextcloud_service_name: nextcloud
+nextcloud_html_dir: /mnt/nextcloud/html
+nextcloud_data_dir: /mnt/nextcloud/data
+nextcloud_data_dir_in_container: /mnt/nextcloud/data/_data
+nextcloud_published_port: 8083
+nextcloud_mysql_host: 10.27.70.11
+nextcloud_mysql_database: nextcloud
+nextcloud_mysql_user: nextcloud
+nextcloud_mysql_password: "{{ docker1_nextcloud_mysql_password }}"
+nextcloud_admin_user: cmkadmin
+nextcloud_admin_password: "{{ docker1_nextcloud_admin_password }}"
+nextcloud_redis_image: redis:alpine
+nextcloud_redis_container_name: nextcloud-redis
+nextcloud_redis_service_name: redis
+nextcloud_redis_volume_name: nextcloud_redisdata
+nextcloud_mail_domain: koerbcm.com
+nextcloud_mail_from_address: nextcloud
+nextcloud_smtp_host: outbound.mailhop.org
+nextcloud_smtp_port: 587
+nextcloud_smtp_name: koerbcm
+nextcloud_smtp_password: "{{ docker1_nextcloud_smtp_password }}"
+nextcloud_smtp_secure: tls
+nextcloud_trusted_domains: nextcloud.kirby.lan nextcloud.koerbcm.com 10.27.70.11:8083
+nextcloud_trusted_proxies: 10.27.27.1
+nextcloud_overwrite_cli_url: https://nextcloud.koerbcm.com
+nextcloud_overwrite_protocol: https
+nextcloud_apache_disable_rewrite_ip: "1"
+nextcloud_php_memory_limit: 512M
+nextcloud_php_upload_limit: 512M
+nextcloud_php_opcache_memory_consumption: "128"
+nextcloud_apache_body_limit: "1073741824"
+nextcloud_watchtower_monitor_only: true
+
+paperless_enabled: true
+paperless_project_name: paperless
+paperless_project_dir: /opt/stacks/paperless
+paperless_web_image: ghcr.io/paperless-ngx/paperless-ngx:latest
+paperless_published_port: 8010
+paperless_db_image: postgres:16
+paperless_db_name: paperless
+paperless_db_user: paperless
+paperless_db_password: "{{ docker1_paperless_db_password }}"
+paperless_db_data_dir: /mnt/dockerVolumes/docker1/pg_data
+paperless_broker_image: redis:7
+paperless_redis_data_dir: /mnt/dockerVolumes/docker1/redis_data
+paperless_gotenberg_image: gotenberg/gotenberg:8.7
+paperless_gotenberg_published_port: 3300
+paperless_tika_image: apache/tika:latest
+paperless_tika_published_port: 9998
+paperless_data_dir: /mnt/dockerVolumes/docker1/paperless_data
+paperless_media_dir: /mnt/dockerVolumes/docker1/paperless_media
+paperless_export_dir: /mnt/dockerVolumes/docker1/paperless_export
+paperless_consume_dir: /mnt/dockerVolumes/docker1/paperless_consume
+paperless_url: https://paperless.koerbcm.com
+paperless_secret_key: "{{ docker1_paperless_secret_key }}"
+paperless_csrf_trusted_origins: http://paperless.kirby.lan
+paperless_email_host: outbound.mailhop.org
+paperless_email_from: paperless@koerbcm.com
+paperless_email_port: 587
+paperless_email_host_user: koerbcm
+paperless_email_host_password: "{{ docker1_paperless_email_host_password }}"
+paperless_email_use_tls: "true"
+paperless_tika_enabled: "1"
+paperless_tika_endpoint: http://10.27.70.11:9998
+paperless_gotenberg_endpoint: http://10.27.70.11:3300
+paperless_usermap_uid: 1000
+paperless_usermap_gid: 100
+paperless_filename_format: "{{ '{{ created_year }}/{{ correspondent }}/{{ document_type }}_{{ title }}_{{ created }}' }}"
+paperless_consumer_recursive: "1"
+paperless_consumer_polling: "60"
+paperless_consumer_subdirs_as_tags: "1"
+paperless_consumer_ignore_patterns: '[".DS_STORE/*", "._*", ".stfolder/*","@eaDir/*"]'
+paperless_consumer_delete_duplicates: "1"
+paperless_ocr_user_args: '{"invalidate_digital_signatures": true}'
+paperless_watchtower_monitor_only: true
+paperless_log_driver: gelf
+paperless_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"
+
+host_application_inventory:
+  docker:
+    - name: graylog7-graylog-1
+      role: graylog
+      managed_by_ansible: true
+    - name: graylog7-datanode-1
+      role: graylog
+      managed_by_ansible: true
+    - name: mysql-db-1
+      role: mysql
+      managed_by_ansible: true
+    - name: ombi
+      role: ombi
+      managed_by_ansible: true
+    - name: portainer
+      role: portainer
+      managed_by_ansible: true
+    - name: netdata
+      role: netdata
+      managed_by_ansible: true
+    - name: homepage
+      role: homepage
+      managed_by_ansible: true
+    - name: nextcloud
+      role: nextcloud
+      managed_by_ansible: true
+    - name: paperless-webserver-1
+      role: paperless
+      managed_by_ansible: true
+    - name: paperless-db-1
+      role: paperless
+      managed_by_ansible: true
+    - name: paperless-broker-1
+      role: paperless
+      managed_by_ansible: true
+    - name: paperless-gotenberg-1
+      role: paperless
+      managed_by_ansible: true
+    - name: paperless-tika-1
+      role: paperless
+      managed_by_ansible: true
+    - name: it-tools
+      role: it-tools
+      managed_by_ansible: true
+  host_logging:
+    - rsyslog remote forwarding to 10.27.70.11:1518/udp
+  local_scripts:
+    - /opt/scripts/system-health.sh
+    - /usr/local/bin/docker_db_backup-nextcloud.sh
+    - /usr/local/bin/docker_db_backup-ombi.sh
+    - /usr/local/bin/docker_opensearch_snapshot.sh
+    - /usr/local/bin/graylog-backup-mongo.sh
+    - /usr/local/bin/graylog-backup-config.sh
+    - /usr/local/bin/graylog-datanode-snapshot.sh

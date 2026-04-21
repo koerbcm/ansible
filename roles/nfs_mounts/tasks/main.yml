@@ -1,0 +1,42 @@
+---
+- name: Validate NFS mount definitions
+  ansible.builtin.assert:
+    that:
+      - item.path is defined
+      - item.path | length > 0
+      - item.src is defined
+      - item.src | length > 0
+    fail_msg: "Each nfs_mounts entry must define both path and src."
+    success_msg: "NFS mount definition for {{ item.path }} is valid."
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    label: "{{ item.path | default(item.src | default('unknown-mount')) }}"
+
+- name: Install NFS client packages
+  ansible.builtin.apt:
+    name:
+      - nfs-common
+    state: present
+    update_cache: true
+  when:
+    - ansible_os_family == "Debian"
+    - nfs_mounts | length > 0
+
+- name: Ensure NFS mount directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Mount NFS-backed application data
+  ansible.posix.mount:
+    path: "{{ item.path }}"
+    src: "{{ item.src }}"
+    fstype: "{{ item.fstype | default('nfs') }}"
+    opts: "{{ item.opts | default('defaults,_netdev') }}"
+    state: mounted
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    label: "{{ item.path }}"

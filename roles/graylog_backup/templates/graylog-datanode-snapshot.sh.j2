@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SNAPSHOT_REPO="{{ graylog_backup_snapshot_repo }}"
+SNAPSHOT_ROOT="{{ graylog_backup_snapshot_root }}"
+SNAPSHOT_REPO_LOCATION="{{ graylog_backup_snapshot_repo_location }}"
+OPENSEARCH_URL="{{ graylog_backup_snapshot_url }}"
+SNAPSHOT_RETENTION_DAYS="{{ graylog_backup_snapshot_retention_days }}"
+SNAPSHOT_NAME="graylog-$(date +%F-%H%M%S)"
+
+opensearch_request() {
+  local method="$1"
+  local endpoint="$2"
+  local payload="${3:-}"
+  local response_file
+  local status
+  local curl_rc
+  response_file="$(mktemp)"
+
+  if [[ -n "${payload}" ]]; then
+    status="$(curl -sS -o "${response_file}" -w '%{http_code}' -X "${method}" \
+      "${OPENSEARCH_URL}${endpoint}" \
+      -H 'Content-Type: application/json' \
+      -d "${payload}")" || {
+      curl_rc=$?
+      echo "OpenSearch request failed: ${method} ${endpoint} (curl exit ${curl_rc})" >&2
+      cat "${response_file}" >&2 || true
+      rm -f "${response_file}"
+      return "${curl_rc}"
+    }
+  else
+    status="$(curl -sS -o "${response_file}" -w '%{http_code}' -X "${method}" \
+      "${OPENSEARCH_URL}${endpoint}")" || {
+      curl_rc=$?
+      echo "OpenSearch request failed: ${method} ${endpoint} (curl exit ${curl_rc})" >&2
+      cat "${response_file}" >&2 || true
+      rm -f "${response_file}"
+      return "${curl_rc}"
+    }
+  fi
+
+  if ! [[ "${status}" =~ ^2[0-9][0-9]$ ]]; then
+    echo "OpenSearch request failed: ${method} ${endpoint} (HTTP ${status})" >&2
+    cat "${response_file}" >&2 || true
+    rm -f "${response_file}"
+    return 1
+  fi
+
+  cat "${response_file}"
+  rm -f "${response_file}"
+}
+
+mkdir -p "${SNAPSHOT_ROOT}"
+
+opensearch_request "PUT" "/_snapshot/${SNAPSHOT_REPO}" "{
+    \"type\": \"fs\",
+    \"settings\": {
+      \"location\": \"${SNAPSHOT_REPO_LOCATION}\",
+      \"compress\": true
+    }
+  }" >/dev/null
+
+opensearch_request "PUT" "/_snapshot/${SNAPSHOT_REPO}/${SNAPSHOT_NAME}?wait_for_completion=true" '{
+    "indices": "*",
+    "ignore_unavailable": true,
+    "include_global_state": true
+  }'
+
+if [[ "${SNAPSHOT_RETENTION_DAYS}" =~ ^[0-9]+$ ]] && (( SNAPSHOT_RETENTION_DAYS > 0 )); then
+  CUTOFF_EPOCH="$(date -d "-${SNAPSHOT_RETENTION_DAYS} days" +%s)"
+
+  opensearch_request "GET" "/_snapshot/${SNAPSHOT_REPO}/_all" \
+    | python3 -c '
+import datetime
+import json
+import re
+import sys
+
+cutoff_epoch = int(sys.argv[1])
+cutoff_millis = cutoff_epoch * 1000
+payload = json.load(sys.stdin)
+pattern = re.compile(r"^graylog-(\d{4}-\d{2}-\d{2}-\d{6})$")
+
+for snapshot in payload.get("snapshots", []):
+    name = snapshot.get("snapshot", "")
+    if not pattern.match(name):
+        continue
+    start_time_millis = snapshot.get("start_time_in_millis")
+    if isinstance(start_time_millis, int):
+        if start_time_millis < cutoff_millis:
+            print(name)
+        continue
+    match = pattern.match(name)
+    created = datetime.datetime.strptime(match.group(1), "%Y-%m-%d-%H%M%S")
+    if int(created.replace(tzinfo=datetime.timezone.utc).timestamp()) < cutoff_epoch:
+        print(name)
+' "${CUTOFF_EPOCH}" \
+    | while IFS= read -r OLD_SNAPSHOT; do
+        if [[ -n "${OLD_SNAPSHOT}" ]]; then
+          opensearch_request "DELETE" "/_snapshot/${SNAPSHOT_REPO}/${OLD_SNAPSHOT}" >/dev/null
+        fi
+      done
+fi

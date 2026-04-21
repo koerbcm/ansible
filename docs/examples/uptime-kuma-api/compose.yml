@@ -1,0 +1,18 @@
+services:
+  kuma_api:
+    container_name: backend
+    image: medaziz11/uptimekuma_restapi
+    volumes:
+      - /volume1/dockerVolumes/nas/uptimeKumaApi_data:/db
+    restart: always
+    environment:
+      KUMA_SERVER: http://kuma.kirby.lan
+      KUMA_USERNAME: koerbcm
+      KUMA_PASSWORD: "${KUMA_PASSWORD}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+      # Keep JWT signatures stable across restarts/worker respawns.
+      SECRET_KEY: "${KUMA_API_SECRET_KEY}"
+      # Optional: shorten token lifetime to reduce stale-token blast radius.
+      ACCESS_TOKEN_EXPIRATION: "1440"
+    ports:
+      - "9001:8000"

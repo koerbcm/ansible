@@ -1,0 +1,14 @@
+module(load="imfile")
+
+{% for input in log_forwarder_file_inputs %}
+input(
+  type="imfile"
+  File="{{ input.file }}"
+  Tag="{{ (input.tag | regex_replace(':$', '')) ~ ':' }}"
+  Facility="{{ input.facility | default(log_forwarder_file_input_facility) }}"
+  Severity="{{ input.severity | default(log_forwarder_file_input_severity) }}"
+  PersistStateInterval="{{ input.persist_state_interval | default(log_forwarder_file_input_persist_state_interval) }}"
+  readMode="{{ input.read_mode | default(log_forwarder_file_input_read_mode) }}"
+  reopenOnTruncate="{{ 'on' if input.reopen_on_truncate | default(log_forwarder_file_input_reopen_on_truncate) else 'off' }}"
+)
+{% endfor %}

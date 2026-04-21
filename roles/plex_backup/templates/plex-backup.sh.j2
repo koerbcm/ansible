@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE_DIR="{{ plex_backup_source_dir }}"
+DEST_DIR="{{ plex_backup_destination_dir }}"
+LOCK_FILE="/run/plex-backup.lock"
+
+if [[ ! -d "${SOURCE_DIR}" ]]; then
+  echo "Plex backup source does not exist: ${SOURCE_DIR}" >&2
+  exit 1
+fi
+
+mkdir -p "${DEST_DIR}"
+
+RSYNC_ARGS=(
+  --archive
+  --delete
+  --delete-excluded
+  --human-readable
+  --numeric-ids
+  --stats
+)
+
+{% if plex_backup_rsync_bwlimit | string | length > 0 %}
+RSYNC_ARGS+=(--bwlimit={{ plex_backup_rsync_bwlimit }})
+{% endif %}
+{% for exclude in plex_backup_excludes %}
+RSYNC_ARGS+=(--exclude={{ exclude | quote }})
+{% endfor %}
+
+flock -n "${LOCK_FILE}" nice -n 10 ionice -c2 -n7 rsync "${RSYNC_ARGS[@]}" "${SOURCE_DIR}/" "${DEST_DIR}/"

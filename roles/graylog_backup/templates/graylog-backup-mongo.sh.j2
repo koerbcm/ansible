@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="{{ graylog_backup_root }}/mongo"
+MONGO_CONTAINER="{{ graylog_backup_mongo_container_name }}"
+TIMESTAMP="$(date +%F-%H%M%S)"
+DEST_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
+
+mkdir -p "${DEST_DIR}"
+
+docker exec "${MONGO_CONTAINER}" mongodump \
+  --uri="{{ graylog_backup_mongo_uri }}" \
+  --archive \
+  --gzip > "${DEST_DIR}/graylog-mongo.archive.gz"
+
+find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ graylog_backup_mongo_retention_days }} -exec rm -rf {} +

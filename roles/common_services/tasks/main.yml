@@ -1,0 +1,47 @@
+---
+- name: Install common service packages
+  ansible.builtin.apt:
+    name: "{{ common_service_packages }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Ensure common services are in the desired state
+  ansible.builtin.systemd_service:
+    name: "{{ item.name }}"
+    enabled: "{{ item.enabled }}"
+    state: "{{ item.state }}"
+  loop: "{{ common_service_units }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not (ansible_check_mode and item.name == 'ufw')
+
+- name: Skip ufw service state validation in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping ufw service-state enforcement because the oneshot unit reports false-positive changes."
+  when:
+    - ansible_check_mode
+    - (common_service_units | selectattr('name', 'equalto', 'ufw') | list | length) > 0
+
+- name: Ensure journald configuration directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: common_journald_enabled | bool
+
+- name: Configure journald retention limits
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/99-homelab.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Journal]
+      {% for key, value in common_journald_settings | dictsort %}
+      {{ key }}={{ value }}
+      {% endfor %}
+  when: common_journald_enabled | bool
+  notify: Restart systemd-journald

@@ -1,0 +1,13 @@
+---
+ombi_enabled: false
+ombi_project_name: ombi
+ombi_project_dir: "{{ homelab_stack_root }}/ombi"
+ombi_compose_file: compose.yml
+ombi_image: lscr.io/linuxserver/ombi:latest
+ombi_container_name: ombi
+ombi_service_name: ombi
+ombi_config_dir: ""
+ombi_published_port: 3579
+ombi_puid: 1000
+ombi_pgid: 1000
+ombi_watchtower_depends_on: ""

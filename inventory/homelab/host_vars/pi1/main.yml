@@ -1,0 +1,182 @@
+---
+nfs_mounts:
+  - path: /mnt/dockerVolumes
+    src: 10.27.27.9:/volume1/dockerVolumes
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/plexLibrary
+    src: 10.27.27.9:/volume1/Plex/Library
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/plexStaging
+    src: 10.27.27.9:/volume1/Plex/staging
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/backups
+    src: 10.27.27.9:/volume1/backups
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+
+log_forwarder_enabled: true
+log_forwarder_target: 10.27.70.11
+log_forwarder_port: 1518
+log_forwarder_protocol: udp
+log_forwarder_template: RSYSLOG_SyslogProtocol23Format
+log_forwarder_apparmor_allow_paths:
+  - /mnt/dockerVolumes/pi1/sabnzbd_config/
+  - /mnt/dockerVolumes/pi1/sabnzbd_config/**
+log_forwarder_file_inputs:
+  - file: /mnt/dockerVolumes/pi1/sabnzbd_config/logs/*.log
+    tag: sabnzbd-file
+
+portainer_agent_enabled: true
+portainer_agent_project_dir: /opt/stacks/portainer-agent
+
+radarr_enabled: true
+radarr_project_name: radarr
+radarr_project_dir: /opt/stacks/radarr
+radarr_image: lscr.io/linuxserver/radarr:latest
+radarr_container_name: radarr
+radarr_service_name: radarr
+radarr_config_dir: /mnt/dockerVolumes/pi1/radarr_config
+radarr_library_dir: /mnt/plexLibrary
+radarr_downloads_dir: /mnt/plexStaging
+radarr_published_port: 38081
+radarr_puid: 1027
+radarr_pgid: 100
+
+sonarr_enabled: true
+sonarr_project_name: sonarr
+sonarr_project_dir: /opt/stacks/sonarr
+sonarr_image: lscr.io/linuxserver/sonarr:latest
+sonarr_container_name: sonarr
+sonarr_service_name: sonarr
+sonarr_config_dir: /mnt/dockerVolumes/pi1/sonarr_config
+sonarr_library_dir: /mnt/plexLibrary
+sonarr_downloads_dir: /mnt/plexStaging
+sonarr_published_port: 38082
+sonarr_puid: 1027
+sonarr_pgid: 100
+
+sabnzbd_enabled: true
+sabnzbd_project_name: sabnzbd
+sabnzbd_project_dir: /opt/stacks/sabnzbd
+sabnzbd_image: lscr.io/linuxserver/sabnzbd:latest
+sabnzbd_container_name: sabnzbd
+sabnzbd_service_name: sabnzbd
+sabnzbd_config_dir: /mnt/dockerVolumes/pi1/sabnzbd_config
+sabnzbd_downloads_dir: /mnt/plexStaging
+sabnzbd_published_port: 38080
+sabnzbd_puid: 1027
+sabnzbd_pgid: 100
+sabnzbd_permission_fix_enabled: true
+sabnzbd_permission_fix_user: plex
+
+lazylibrarian_enabled: true
+lazylibrarian_project_name: lazylibrarian
+lazylibrarian_project_dir: /opt/stacks/lazylibrarian
+lazylibrarian_image: lscr.io/linuxserver/lazylibrarian:latest
+lazylibrarian_container_name: lazylibrarian
+lazylibrarian_service_name: lazylibrarian
+lazylibrarian_config_dir: /mnt/dockerVolumes/pi1/lazylibrarian_config
+lazylibrarian_books_dir: /mnt/plexLibrary
+lazylibrarian_downloads_dir: /mnt/plexStaging
+lazylibrarian_published_port: 38084
+lazylibrarian_puid: 1000
+lazylibrarian_pgid: 1000
+lazylibrarian_docker_mods: linuxserver/mods:universal-calibre|linuxserver/mods:lazylibrarian-ffmpeg
+
+app_config_backup_enabled: true
+app_config_backup_root: /mnt/backups/pi1/app-config
+app_config_backup_on_calendar: "*-*-* 02:30:00"
+app_config_backup_items:
+  - name: radarr
+    source: /mnt/dockerVolumes/pi1/radarr_config
+    excludes:
+      - MediaCover
+      - MediaCover/*
+  - name: sonarr
+    source: /mnt/dockerVolumes/pi1/sonarr_config
+    excludes:
+      - MediaCover
+      - MediaCover/*
+  - name: sabnzbd
+    source: /mnt/dockerVolumes/pi1/sabnzbd_config
+  - name: lazylibrarian
+    source: /mnt/dockerVolumes/pi1/lazylibrarian_config
+    excludes:
+      - cache
+      - cache/*
+      - Cache
+      - Cache/*
+
+maintenance_pre_backup_services:
+  - app-config-backup.service
+
+watchtower_enabled: true
+watchtower_manage_runtime: false
+watchtower_project_name: watchtower
+watchtower_project_dir: /opt/stacks/watchtower
+watchtower_container_name: watchtower-watchtower-1
+watchtower_service_name: watchtower
+watchtower_schedule: "0 5 * * *"
+watchtower_environment:
+  WATCHTOWER_NOTIFICATION_URL: "{{ pi1_watchtower_notification_url }}"
+  WATCHTOWER_HTTP_API_TOKEN: "{{ pi1_watchtower_http_api_token }}"
+  WATCHTOWER_LIFECYCLE_HOOKS: "true"
+  WATCHTOWER_CLEANUP: "true"
+  TZ: "America/Denver"
+  WATCHTOWER_SCHEDULE: "0 5 * * *"
+  WATCHTOWER_NOTIFICATION_TITLE_TAG: "watchtower/pi1"
+  WATCHTOWER_NOTIFICATION_REPORT: "true"
+
+storage_cleanup_enabled: true
+storage_cleanup_docker_volume_candidates:
+  - lazylibrarian_downloads
+  - lazylibrarian_lazylibrarian_config
+  - lazylibrarian_library
+  - radarr_downloads
+  - radarr_library
+  - radarr_radarr_config
+  - sabnzbd_sabnzbd_config
+  - sabnzbd_sabnzbd_downloads
+  - sonarr_downloads
+  - sonarr_library
+  - sonarr_sonarr_config
+
+service_backlog:
+  - name: media_app_configs
+    status: nfs_live_config_with_scheduled_backups
+    goal: keep Radarr/Sonarr/SABnzbd/LazyLibrarian configs backed up separately from live NFS paths
+  - name: watchtower-watchtower-1
+    status: codified_inactive
+    goal: keep rendered in Ansible while leaving runtime disabled for now
+  - name: pre_ansible_named_volumes
+    status: stale_nfs_volume_wrappers
+    goal: remove after confirming active bind-mounted stacks remain stable and backup expectations are met
+
+host_application_inventory:
+  docker:
+    - name: radarr
+      role: radarr
+      managed_by_ansible: true
+    - name: sonarr
+      role: sonarr
+      managed_by_ansible: true
+    - name: sabnzbd
+      role: sabnzbd
+      managed_by_ansible: true
+    - name: lazylibrarian
+      role: lazylibrarian
+      managed_by_ansible: true
+    - name: portainer_agent
+      role: portainer_agent
+      managed_by_ansible: true
+    - name: watchtower-watchtower-1
+      role: watchtower
+      managed_by_ansible: false
+  host_logging:
+    - rsyslog remote forwarding to 10.27.70.11:1518/udp
+    - rsyslog imfile forwarding for SABnzbd file logs
+  host_services:
+    - nginx

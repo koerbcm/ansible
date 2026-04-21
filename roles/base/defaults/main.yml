@@ -1,0 +1,16 @@
+---
+timezone: Etc/UTC
+base_apt_force_ipv4: false
+base_apt_cache_valid_time: 3600
+base_apt_lock_timeout: 300
+base_apt_normalize_ubuntu_archive_mirror: true
+base_apt_ubuntu_archive_mirror: http://archive.ubuntu.com/ubuntu
+base_apt_ubuntu_archive_mirror_aliases:
+  - http://us.archive.ubuntu.com/ubuntu
+base_packages: []
+base_groups: []
+base_users: []
+base_extra_users: []
+base_user_password_hashes: {}
+base_break_glass_users: []
+base_require_break_glass_passwords: false

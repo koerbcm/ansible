@@ -1,0 +1,69 @@
+services:
+  {{ nextcloud_service_name }}:
+    image: {{ nextcloud_image | quote }}
+    container_name: {{ nextcloud_container_name | quote }}
+    environment:
+      TZ: {{ timezone | quote }}
+      MYSQL_HOST: {{ nextcloud_mysql_host | quote }}
+      MYSQL_DATABASE: {{ nextcloud_mysql_database | quote }}
+      MYSQL_USER: {{ nextcloud_mysql_user | quote }}
+      MYSQL_PASSWORD: {{ nextcloud_mysql_password | quote }}
+      REDIS_HOST: {{ nextcloud_redis_service_name | quote }}
+      NEXTCLOUD_ADMIN_USER: {{ nextcloud_admin_user | quote }}
+      NEXTCLOUD_ADMIN_PASSWORD: {{ nextcloud_admin_password | quote }}
+      NEXTCLOUD_DATA_DIR: {{ nextcloud_data_dir_in_container | quote }}
+      NEXTCLOUD_TRUSTED_DOMAINS: {{ nextcloud_trusted_domains | quote }}
+      TRUSTED_PROXIES: {{ nextcloud_trusted_proxies | quote }}
+      OVERWRITECLIURL: {{ nextcloud_overwrite_cli_url | quote }}
+      OVERWRITEPROTOCOL: {{ nextcloud_overwrite_protocol | quote }}
+      APACHE_DISABLE_REWRITE_IP: {{ nextcloud_apache_disable_rewrite_ip | quote }}
+      MAIL_DOMAIN: {{ nextcloud_mail_domain | quote }}
+      MAIL_FROM_ADDRESS: {{ nextcloud_mail_from_address | quote }}
+      SMTP_HOST: {{ nextcloud_smtp_host | quote }}
+      SMTP_PORT: {{ nextcloud_smtp_port | string | quote }}
+      SMTP_NAME: {{ nextcloud_smtp_name | quote }}
+      SMTP_PASSWORD: {{ nextcloud_smtp_password | quote }}
+      SMTP_SECURE: {{ nextcloud_smtp_secure | quote }}
+      PHP_MEMORY_LIMIT: {{ nextcloud_php_memory_limit | quote }}
+      PHP_UPLOAD_LIMIT: {{ nextcloud_php_upload_limit | quote }}
+      PHP_OPCACHE_MEMORY_CONSUMPTION: {{ nextcloud_php_opcache_memory_consumption | quote }}
+      APACHE_BODY_LIMIT: {{ nextcloud_apache_body_limit | quote }}
+    ports:
+      - "{{ nextcloud_published_port }}:80"
+    restart: unless-stopped
+    depends_on:
+      - {{ nextcloud_redis_service_name }}
+    volumes:
+      - {{ nextcloud_html_dir | quote }}:/var/www/html
+      - {{ nextcloud_data_dir | quote }}:/mnt/nextcloud/data
+    logging:
+      driver: {{ nextcloud_log_driver | quote }}
+      options:
+{% for key, value in nextcloud_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}
+{% if nextcloud_watchtower_monitor_only | bool %}
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+{% endif %}
+
+  {{ nextcloud_redis_service_name }}:
+    image: {{ nextcloud_redis_image | quote }}
+    container_name: {{ nextcloud_redis_container_name | quote }}
+    restart: unless-stopped
+    volumes:
+      - {{ nextcloud_redis_volume_name | quote }}:/data
+    logging:
+      driver: {{ nextcloud_log_driver | quote }}
+      options:
+{% for key, value in nextcloud_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}
+{% if nextcloud_watchtower_monitor_only | bool %}
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+{% endif %}
+
+volumes:
+  {{ nextcloud_redis_volume_name }}:
+    name: {{ nextcloud_redis_volume_name | quote }}

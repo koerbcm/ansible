@@ -1,0 +1,15 @@
+services:
+  {{ radarr_service_name }}:
+    image: {{ radarr_image | quote }}
+    container_name: {{ radarr_container_name | quote }}
+    environment:
+      PUID: {{ radarr_puid | string | quote }}
+      PGID: {{ radarr_pgid | string | quote }}
+      TZ: {{ timezone | quote }}
+    ports:
+      - "{{ radarr_published_port }}:7878"
+    restart: unless-stopped
+    volumes:
+      - {{ radarr_config_dir | quote }}:/config
+      - {{ radarr_library_dir | quote }}:/movies
+      - {{ radarr_downloads_dir | quote }}:/downloads

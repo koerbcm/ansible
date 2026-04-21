@@ -1,0 +1,105 @@
+---
+- name: Validate Ombi configuration
+  ansible.builtin.assert:
+    that:
+      - ombi_project_dir | length > 0
+      - ombi_compose_file | length > 0
+      - ombi_image | length > 0
+      - ombi_container_name | length > 0
+      - ombi_service_name | length > 0
+      - ombi_config_dir | length > 0
+      - ombi_published_port | int > 0
+    fail_msg: "Ombi requires project settings, config dir, and a published port."
+    success_msg: "Ombi configuration is valid."
+  when: ombi_enabled | bool
+
+- name: Ensure Ombi project directory exists
+  ansible.builtin.file:
+    path: "{{ ombi_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: ombi_enabled | bool
+
+- name: Ensure Ombi config directory exists
+  ansible.builtin.file:
+    path: "{{ ombi_config_dir }}"
+    state: directory
+  when: ombi_enabled | bool
+
+- name: Render Ombi compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/ombi.compose.yml.j2"
+    dest: "{{ ombi_project_dir }}/{{ ombi_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: ombi_enabled | bool
+
+- name: Inspect existing Ombi container
+  community.docker.docker_container_info:
+    name: "{{ ombi_container_name }}"
+  register: ombi_existing_container
+  when: ombi_enabled | bool
+
+- name: Determine whether Ombi needs one-time compose adoption
+  ansible.builtin.set_fact:
+    ombi_needs_adoption: >-
+      {{
+        (ombi_existing_container.exists | default(false))
+        and
+        (
+          ((ombi_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != ombi_project_name
+          or
+          ((ombi_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != ombi_service_name
+        )
+      }}
+  when: ombi_enabled | bool
+
+- name: Note Ombi one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Ombi container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - ombi_enabled | bool
+    - ansible_check_mode
+    - ombi_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Ombi container
+  community.docker.docker_container:
+    name: "{{ ombi_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - ombi_enabled | bool
+    - not ansible_check_mode
+    - ombi_needs_adoption | default(false)
+
+- name: Deploy Ombi with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ ombi_project_name }}"
+    project_src: "{{ ombi_project_dir }}"
+    files:
+      - "{{ ombi_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: ombi_compose_result
+  when:
+    - ombi_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Ombi compose actions
+  ansible.builtin.debug:
+    var: ombi_compose_result.actions
+  when:
+    - ombi_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Ombi compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Ombi docker compose deployment."
+  when:
+    - ombi_enabled | bool
+    - ansible_check_mode

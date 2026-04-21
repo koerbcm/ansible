@@ -1,0 +1,19 @@
+services:
+  {{ postgresql_service_name }}:
+    image: {{ postgresql_image | quote }}
+    container_name: {{ postgresql_container_name | quote }}
+    hostname: {{ postgresql_hostname | quote }}
+    environment:
+      POSTGRES_USER: {{ postgresql_user | quote }}
+      POSTGRES_PASSWORD: {{ postgresql_password | quote }}
+      PGDATA: {{ postgresql_pgdata | quote }}
+    ports:
+      - "{{ postgresql_published_port }}:5432"
+    volumes:
+      - {{ postgresql_data_dir | quote }}:/var/lib/postgresql
+    stop_grace_period: {{ postgresql_stop_grace_period | quote }}
+    restart: unless-stopped
+{% if postgresql_watchtower_monitor_only | bool %}
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+{% endif %}

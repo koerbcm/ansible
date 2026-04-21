@@ -1,0 +1,234 @@
+---
+- name: Resolve Docker apt architecture
+  ansible.builtin.set_fact:
+    docker_apt_arch: "{{ docker_apt_arch_map.get(ansible_architecture, ansible_architecture) }}"
+
+- name: Install Docker prerequisite packages
+  ansible.builtin.apt:
+    name: "{{ docker_prerequisite_packages }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Ensure apt keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Docker apt signing key
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/{{ 'ubuntu' if ansible_distribution == 'Ubuntu' else 'debian' }}/gpg"
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure Docker apt repository
+  ansible.builtin.apt_repository:
+    filename: docker
+    repo: >-
+      deb [arch={{ docker_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/{{ 'ubuntu' if ansible_distribution == 'Ubuntu' else 'debian' }}
+      {{ ansible_distribution_release }} stable
+    state: present
+    update_cache: true
+
+- name: Install Docker engine packages
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+
+- name: Ensure docker group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+- name: Add admin users to docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_admin_users }}"
+
+- name: Ensure Docker override directory exists
+  ansible.builtin.file:
+    path: "{{ docker_override_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Docker systemd override
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/docker-override.conf.j2"
+    dest: "{{ docker_override_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd and restart docker
+
+- name: Ensure Docker certificate directory exists
+  ansible.builtin.file:
+    path: "{{ docker_cert_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: docker_tls_enabled
+
+- name: Resolve Docker TLS subject alternative names
+  ansible.builtin.set_fact:
+    docker_tls_resolved_sans: >-
+      {{
+        (
+          (docker_tls_subject_alt_names | default([]))
+          + (docker_tls_san_ips | default([]) | map('regex_replace', '^(.*)$', 'IP:\\1') | list)
+          + ['DNS:' ~ inventory_hostname]
+        ) | unique
+      }}
+  when: docker_tls_enabled
+
+- name: Check whether Docker CA key exists
+  ansible.builtin.stat:
+    path: "{{ docker_cert_dir }}/ca-key.pem"
+  register: docker_ca_key_stat
+  when: docker_tls_enabled
+
+- name: Generate Docker CA private key
+  ansible.builtin.command:
+    cmd: "openssl genrsa -out {{ docker_cert_dir }}/ca-key.pem 4096"
+  when:
+    - docker_tls_enabled
+    - not docker_ca_key_stat.stat.exists
+
+- name: Generate Docker CA certificate
+  ansible.builtin.command:
+    cmd: >-
+      openssl req -new -x509 -days {{ docker_cert_valid_days }}
+      -key {{ docker_cert_dir }}/ca-key.pem
+      -sha256
+      -out {{ docker_cert_dir }}/ca.pem
+      -subj /CN=docker-ca
+  args:
+    creates: "{{ docker_cert_dir }}/ca.pem"
+  when: docker_tls_enabled
+
+- name: Check whether Docker server key exists
+  ansible.builtin.stat:
+    path: "{{ docker_cert_dir }}/server-key.pem"
+  register: docker_server_key_stat
+  when: docker_tls_enabled
+
+- name: Check whether Docker server certificate exists
+  ansible.builtin.stat:
+    path: "{{ docker_cert_dir }}/server-cert.pem"
+  register: docker_server_cert_stat
+  when: docker_tls_enabled
+
+- name: Generate Docker server private key
+  ansible.builtin.command:
+    cmd: "openssl genrsa -out {{ docker_cert_dir }}/server-key.pem 4096"
+  when:
+    - docker_tls_enabled
+    - not docker_server_key_stat.stat.exists
+
+- name: Generate Docker server CSR
+  ansible.builtin.command:
+    cmd: >-
+      openssl req -subj /CN={{ docker_server_cert_common_name }}
+      -new
+      -key {{ docker_cert_dir }}/server-key.pem
+      -out {{ docker_cert_dir }}/server.csr
+  args:
+    creates: "{{ docker_cert_dir }}/server.csr"
+  when:
+    - docker_tls_enabled
+    - not docker_server_cert_stat.stat.exists
+
+- name: Write Docker server certificate extfile
+  ansible.builtin.copy:
+    dest: "{{ docker_cert_dir }}/server-extfile.cnf"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      subjectAltName = {{ docker_tls_resolved_sans | join(',') }}
+      extendedKeyUsage = serverAuth
+  when:
+    - docker_tls_enabled
+    - not docker_server_cert_stat.stat.exists
+
+- name: Generate Docker server certificate signed by CA
+  ansible.builtin.command:
+    cmd: >-
+      openssl x509 -req -days {{ docker_cert_valid_days }} -sha256
+      -in {{ docker_cert_dir }}/server.csr
+      -CA {{ docker_cert_dir }}/ca.pem
+      -CAkey {{ docker_cert_dir }}/ca-key.pem
+      -CAcreateserial
+      -out {{ docker_cert_dir }}/server-cert.pem
+      -extfile {{ docker_cert_dir }}/server-extfile.cnf
+  args:
+    creates: "{{ docker_cert_dir }}/server-cert.pem"
+  when:
+    - docker_tls_enabled
+    - not docker_server_cert_stat.stat.exists
+
+- name: Check which Docker certificate files exist
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop:
+    - path: "{{ docker_cert_dir }}/ca-key.pem"
+      mode: "0400"
+    - path: "{{ docker_cert_dir }}/server-key.pem"
+      mode: "0400"
+    - path: "{{ docker_cert_dir }}/ca.pem"
+      mode: "0444"
+    - path: "{{ docker_cert_dir }}/server-cert.pem"
+      mode: "0444"
+  register: docker_cert_file_stats
+  when: docker_tls_enabled
+
+- name: Set Docker certificate permissions
+  ansible.builtin.file:
+    path: "{{ item.item.path }}"
+    owner: root
+    group: root
+    mode: "{{ item.item.mode }}"
+  loop: "{{ docker_cert_file_stats.results | selectattr('stat.exists', 'equalto', true) | list }}"
+  when: docker_tls_enabled
+
+- name: Install Docker daemon configuration
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/{{ 'daemon-server.json.j2' if docker_tls_enabled else 'daemon-client.json.j2' }}"
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd and restart docker
+
+- name: Enable br_netfilter immediately
+  ansible.builtin.command:
+    cmd: modprobe br_netfilter
+  changed_when: false
+  failed_when: false
+
+- name: Persist Docker bridge sysctls
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-docker-bridge.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      net.bridge.bridge-nf-call-iptables=1
+      net.bridge.bridge-nf-call-ip6tables=1
+  notify: Apply sysctl
+
+- name: Ensure docker service is enabled and started
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started

@@ -1,0 +1,17 @@
+services:
+  {{ ombi_service_name }}:
+    image: {{ ombi_image | quote }}
+    container_name: {{ ombi_container_name | quote }}
+    environment:
+      PUID: {{ ombi_puid | string | quote }}
+      PGID: {{ ombi_pgid | string | quote }}
+      TZ: {{ timezone | quote }}
+    ports:
+      - "{{ ombi_published_port }}:3579"
+    restart: unless-stopped
+    volumes:
+      - {{ ombi_config_dir | quote }}:/config
+{% if ombi_watchtower_depends_on | length > 0 %}
+    labels:
+      com.centurylinklabs.watchtower.depends-on: {{ ombi_watchtower_depends_on | quote }}
+{% endif %}

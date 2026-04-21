@@ -1,0 +1,27 @@
+services:
+  {{ watchtower_service_name }}:
+    image: {{ watchtower_image | quote }}
+    container_name: {{ watchtower_container_name | quote }}
+    restart: unless-stopped
+{% if watchtower_environment %}
+    environment:
+{% for key, value in watchtower_environment.items() %}
+      {{ key }}: {{ value | quote }}
+{% endfor %}
+{% endif %}
+    command:
+      - --schedule
+      - {{ watchtower_schedule | quote }}
+{% if watchtower_cleanup | bool %}
+      - --cleanup
+{% endif %}
+{% if watchtower_monitor_only | bool %}
+      - --monitor-only
+{% endif %}
+{% if watchtower_enable_lifecycle_hooks | bool %}
+      - --enable-lifecycle-hooks
+{% endif %}
+    volumes:
+{% for mount in watchtower_mounts %}
+      - {{ mount | quote }}
+{% endfor %}

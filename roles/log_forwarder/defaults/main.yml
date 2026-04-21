@@ -1,0 +1,13 @@
+---
+log_forwarder_enabled: false
+log_forwarder_target: ""
+log_forwarder_port: 1518
+log_forwarder_protocol: udp
+log_forwarder_template: RSYSLOG_SyslogProtocol23Format
+log_forwarder_file_inputs: []
+log_forwarder_file_input_facility: local6
+log_forwarder_file_input_severity: info
+log_forwarder_file_input_persist_state_interval: 100
+log_forwarder_file_input_read_mode: 2
+log_forwarder_file_input_reopen_on_truncate: true
+log_forwarder_apparmor_allow_paths: []

@@ -1,0 +1,115 @@
+# Reference only: recommended Graylog stack shape on docker1 after local-storage migration.
+# This file is not yet rendered or deployed by Ansible.
+#
+# Goals:
+# - Keep live MongoDB, Graylog, and DataNode state on local disk.
+# - Keep NAS-backed storage only for backups and snapshots.
+# - Match the current Graylog input port model already in use.
+
+services:
+  mongodb:
+    image: "mongo:7.0"
+    restart: "on-failure"
+    networks:
+      - graylog
+    volumes:
+      - "/srv/graylog/mongodb-data:/data/db"
+      - "/srv/graylog/mongodb-config:/data/configdb"
+    ports:
+      - "27017:27017"
+    labels:
+      - com.centurylinklabs.watchtower.monitor-only=true
+
+  datanode:
+    image: "${DATANODE_IMAGE:-graylog/graylog-datanode:7.0}"
+    hostname: "datanode"
+    environment:
+      GRAYLOG_DATANODE_OPENSEARCH_HEAP: 15g
+      GRAYLOG_DATANODE_INSECURE_STARTUP: true
+      GRAYLOG_DATANODE_NODE_ID_FILE: "/var/lib/graylog-datanode/node-id"
+      GRAYLOG_DATANODE_ROOT_USERNAME: "${GRAYLOG_ROOT_USERNAME}"
+      GRAYLOG_DATANODE_PASSWORD_SECRET: "${GRAYLOG_PASSWORD_SECRET:?Please configure GRAYLOG_PASSWORD_SECRET in the .env file}"
+      GRAYLOG_DATANODE_MONGODB_URI: "mongodb://mongodb:27017/graylog"
+    ulimits:
+      memlock:
+        hard: -1
+        soft: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "8999:8999/tcp"
+      - "9200:9200/tcp"
+      - "9300:9300/tcp"
+    networks:
+      - graylog
+    volumes:
+      - "/srv/graylog/datanode:/var/lib/graylog-datanode"
+      - "/mnt/backups/graylog/opensearch-snapshots:/mnt/backups"
+      - "/mnt/dockerVolumes/docker1/watchtower_hooks:/mnt/watchtower_hooks"
+    restart: "on-failure"
+    labels:
+      - com.centurylinklabs.watchtower.monitor-only=true
+
+  graylog:
+    hostname: "server"
+    image: "${GRAYLOG_IMAGE:-graylog/graylog:7.0}"
+    depends_on:
+      mongodb:
+        condition: "service_started"
+      datanode:
+        condition: "service_started"
+    entrypoint: "/usr/bin/tini -- /docker-entrypoint.sh"
+    environment:
+      GRAYLOG_DATANODE_INSECURE_STARTUP: true
+      GRAYLOG_NODE_ID_FILE: "/usr/share/graylog/data/data/node-id"
+      GRAYLOG_ROOT_USERNAME: "${GRAYLOG_ROOT_USERNAME}"
+      GRAYLOG_PASSWORD_SECRET: "${GRAYLOG_PASSWORD_SECRET:?Please configure GRAYLOG_PASSWORD_SECRET in the .env file}"
+      GRAYLOG_ROOT_PASSWORD_SHA2: "${GRAYLOG_ROOT_PASSWORD_SHA2:?Please configure GRAYLOG_ROOT_PASSWORD_SHA2 in the .env file}"
+      GRAYLOG_HTTP_BIND_ADDRESS: "0.0.0.0:9000"
+      GRAYLOG_HTTP_EXTERNAL_URI: "http://10.27.70.11:9000/"
+      GRAYLOG_MONGODB_URI: "mongodb://mongodb:27017/graylog"
+      GRAYLOG_TIMEZONE: "America/Denver"
+      TZ: "America/Denver"
+      GRAYLOG_ELASTICSEARCH_HOSTS: "http://datanode:9200"
+      GRAYLOG_TRANSPORT_EMAIL_PROTOCOL: "smtp"
+      GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL: "http://10.27.70.11:9000/"
+      GRAYLOG_TRANSPORT_EMAIL_HOSTNAME: "outbound.mailhop.org"
+      GRAYLOG_TRANSPORT_EMAIL_ENABLED: "true"
+      GRAYLOG_TRANSPORT_EMAIL_PORT: "587"
+      GRAYLOG_TRANSPORT_EMAIL_USE_AUTH: "true"
+      GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME: "${GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME}"
+      GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD: "${GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD}"
+      GRAYLOG_TRANSPORT_EMAIL_USE_TLS: "true"
+      GRAYLOG_TRANSPORT_EMAIL_USE_SSL: "false"
+      GRAYLOG_TRANSPORT_FROM_EMAIL: "graylog@koerbcm.com"
+      GRAYLOG_TRANSPORT_SUBJECT_PREFIX: "[graylog]"
+      GRAYLOG_ALLOW_LEADING_WILDCARD_SEARCHES: "true"
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515/udp"
+      - "1518:1518/udp"
+      - "5044:5044/tcp"
+      - "5140:5140/udp"
+      - "5140:5140/tcp"
+      - "5555:5555/tcp"
+      - "5555:5555/udp"
+      - "9000:9000/tcp"
+      - "12201:12201/tcp"
+      - "12201:12201/udp"
+      - "12202:12202/tcp"
+      - "12202:12202/udp"
+      - "13301:13301/tcp"
+      - "13302:13302/tcp"
+    networks:
+      - graylog
+    volumes:
+      - "/srv/graylog/graylog-data:/usr/share/graylog/data/data"
+      - "/mnt/dockerVolumes/docker1/watchtower_hooks:/mnt/watchtower_hooks"
+    restart: "on-failure"
+    labels:
+      - com.centurylinklabs.watchtower.monitor-only=true
+
+networks:
+  graylog:
+    driver: "bridge"

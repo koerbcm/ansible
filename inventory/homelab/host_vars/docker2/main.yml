@@ -1,0 +1,191 @@
+---
+nfs_mounts:
+  - path: /mnt/dockerVolumes
+    src: 10.27.27.9:/volume1/dockerVolumes
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/plexLibrary
+    src: 10.27.27.9:/volume1/Plex/Library
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/plexStaging
+    src: 10.27.27.9:/volume1/Plex/staging
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/backups
+    src: 10.27.27.9:/volume1/backups
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+
+portainer_agent_enabled: true
+portainer_agent_project_dir: /opt/stacks/portainer-agent
+
+plex_enabled: true
+plex_project_name: plex
+plex_project_dir: /opt/stacks/plex
+plex_image: lscr.io/linuxserver/plex:latest
+plex_container_name: plex
+plex_service_name: plex
+plex_config_volume_name: plexConfig_data
+plex_movies_volume_name: plex_plex_movies
+plex_puid: 1027
+plex_pgid: 100
+plex_version: docker
+plex_transcode_dir: /tmpPlexTranscode
+plex_devices:
+  - /dev/dri:/dev/dri
+plex_backup_enabled: true
+plex_backup_source_dir: /var/lib/docker/volumes/plexConfig_data/_data
+plex_backup_root: /mnt/backups/plex
+plex_backup_destination_dir: /mnt/backups/plex/config-current
+plex_backup_on_calendar: "*-*-* 02:10:00"
+
+postgresql_enabled: true
+postgresql_project_name: postgresql
+postgresql_project_dir: /opt/stacks/postgresql
+postgresql_image: postgres:18
+postgresql_container_name: postgresql
+postgresql_service_name: postgresql
+postgresql_hostname: postgres16
+postgresql_user: koerbcm
+postgresql_password: "{{ docker2_postgresql_password }}"
+postgresql_published_port: 5432
+postgresql_data_dir: /srv/postgresql/data
+postgresql_local_data_dir: /srv/postgresql/data
+postgresql_pgdata: /var/lib/postgresql/18/docker
+postgresql_watchtower_monitor_only: true
+postgresql_managed_host_paths:
+  - path: /srv/postgresql/data
+    owner: "999"
+    group: "999"
+    mode: "0750"
+    recurse_owner_group: true
+postgresql_backup_enabled: true
+postgresql_backup_on_calendar: "*-*-* 01:40:00"
+
+netdata_enabled: true
+netdata_project_name: netdata
+netdata_project_dir: /opt/stacks/netdata
+netdata_image: netdata/netdata:stable
+netdata_container_name: netdata
+netdata_service_name: netdata
+netdata_listener_port: 19999
+netdata_claim_url: https://app.netdata.cloud
+netdata_claim_rooms: cfa21087-dee5-4064-9de6-babda1d020f7
+netdata_claim_token: "{{ docker2_netdata_claim_token }}"
+netdata_config_volume_name: netdata_netdataconfig
+netdata_cache_volume_name: netdata_netdatacache
+netdata_lib_volume_name: netdata_netdatalib
+
+n8n_enabled: true
+n8n_manage_runtime: true
+n8n_project_name: n8n
+n8n_project_dir: /opt/stacks/n8n
+n8n_data_dir: /srv/n8n/data
+n8n_db_host: 10.27.70.12
+n8n_db_database: n8n
+n8n_db_user: n8n_user
+n8n_host: n8n.koerbcm.com
+n8n_protocol: https
+n8n_webhook_url: https://n8n.koerbcm.com/
+n8n_domain_name: koerbcm.com
+n8n_subdomain: n8n
+n8n_timezone: America/Denver
+n8n_smtp_host: outbound.mailhop.org
+n8n_smtp_port: 587
+n8n_smtp_user: koerbcm
+n8n_smtp_sender: n8n@koerbcm.com
+n8n_backup_enabled: true
+n8n_backup_source_dir: /srv/n8n/data
+n8n_backup_on_calendar: "*-*-* 01:50:00"
+
+maintenance_pre_backup_services:
+  - postgresql-backup.service
+  - n8n-backup.service
+  - plex-backup.service
+
+watchtower_enabled: true
+watchtower_manage_runtime: false
+watchtower_project_name: watchtower
+watchtower_project_dir: /opt/stacks/watchtower
+watchtower_container_name: watchtower-watchtower-1
+watchtower_service_name: watchtower
+watchtower_schedule: "0 5 * * *"
+watchtower_environment:
+  WATCHTOWER_NOTIFICATION_URL: "{{ docker2_watchtower_notification_url }}"
+  WATCHTOWER_HTTP_API_TOKEN: "{{ docker2_watchtower_http_api_token }}"
+  WATCHTOWER_LIFECYCLE_HOOKS: "true"
+  WATCHTOWER_CLEANUP: "true"
+  TZ: "America/Denver"
+  WATCHTOWER_SCHEDULE: "0 5 * * *"
+  WATCHTOWER_NOTIFICATION_TITLE_TAG: "watchtower/docker2"
+  WATCHTOWER_NOTIFICATION_REPORT: "true"
+
+storage_cleanup_enabled: true
+storage_cleanup_docker_volume_candidates:
+  - 90a92f4b91531f68be7f95472c3070808854678806446b3127f0689f8bdca6e4
+  - d8436ff3137a4648c5cdd3503a888e8de91936c3b9dd494ab1851f97dc8a0386
+  - e6a874e7e2f35f245275f28b973d136616a30e2088aff7f3f090d46a99dfed9c
+  - n8n_n8n_data
+  - plex_plex_config
+  - plex_plex_tv
+
+service_backlog:
+  - name: plex
+    status: active_local_config_with_selective_backup
+    goal: keep Plex config/database/metadata protected while excluding large rebuildable thumbnail/cache directories
+  - name: postgresql
+    status: active_local_with_backups
+    goal: keep under Ansible with local primary storage and scheduled backups
+  - name: n8n
+    status: active_local_with_backups
+    goal: keep app data and PostgreSQL state protected with scheduled backups
+  - name: watchtower
+    status: codified_inactive
+    goal: keep rendered in Ansible while leaving runtime disabled for now
+  - name: elasticsearch-elasticsearch-1
+    status: inactive
+    goal: preserve as later backlog and decide whether to retire or rebuild
+  - name: kibana
+    status: inactive
+    goal: preserve as later backlog and decide whether to retire or rebuild
+  - name: invoice-ninja
+    status: image_and_nfs_volumes_only
+    goal: determine whether it should be revived or removed from discovery backlog
+  - name: obsidian
+    status: image_and_nfs_volume_only
+    goal: determine whether it should be revived or removed from discovery backlog
+
+host_application_inventory:
+  docker:
+    - name: plex
+      role: plex
+      managed_by_ansible: true
+    - name: postgresql
+      role: postgresql
+      managed_by_ansible: true
+    - name: netdata
+      role: netdata
+      managed_by_ansible: true
+    - name: portainer_agent
+      role: portainer_agent
+      managed_by_ansible: true
+    - name: n8n
+      role: n8n
+      managed_by_ansible: true
+    - name: kibana
+      role: kibana
+      managed_by_ansible: false
+    - name: elasticsearch-elasticsearch-1
+      role: elasticsearch
+      managed_by_ansible: false
+    - name: watchtower-watchtower-1
+      role: watchtower
+      managed_by_ansible: false
+  discovered_images_only:
+    - name: invoiceninja/invoiceninja-debian:latest
+      role: invoice-ninja
+      managed_by_ansible: false
+    - name: lscr.io/linuxserver/obsidian:latest
+      role: obsidian
+      managed_by_ansible: false

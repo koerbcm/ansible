@@ -1,0 +1,42 @@
+volumes:
+  ntfy_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=10.27.27.9,nfsvers=4
+      device: :/volume1/dockerVolumes/pi2/ntfy_data
+  ntfy_lib:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=10.27.27.9,nfsvers=4
+      device: :/volume1/dockerVolumes/pi2/ntfy_lib
+
+services:
+  ntfy:
+    image: binwiederhier/ntfy:v2.21.0-armv7
+    container_name: ntfy
+    command: ["serve"]
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      TZ: America/Denver
+      NTFY_BASE_URL: https://ntfy.koerbcm.com
+      NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
+      NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_ATTACHMENT_CACHE_DIR: /var/lib/ntfy/attachments
+      NTFY_ENABLE_LOGIN: "true"
+    volumes:
+      - ntfy_lib:/var/lib/ntfy
+      - ntfy_data:/etc/ntfy
+    ports:
+      - "8081:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 http://localhost:80/v1/health -O - | grep -Eo '\"healthy\"\\s*:\\s*true' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped

@@ -1,0 +1,9 @@
+[Unit]
+Description=Homelab unit failure notification for %I
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-{{ homelab_failure_notify_environment_file }}
+ExecStart={{ homelab_failure_notify_scripts_dir }}/homelab-unit-failure-notify.sh "%I"

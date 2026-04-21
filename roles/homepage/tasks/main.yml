@@ -1,0 +1,106 @@
+---
+- name: Validate Homepage configuration
+  ansible.builtin.assert:
+    that:
+      - homepage_project_dir | length > 0
+      - homepage_compose_file | length > 0
+      - homepage_image | length > 0
+      - homepage_container_name | length > 0
+      - homepage_service_name | length > 0
+      - homepage_config_dir | length > 0
+      - homepage_published_port | int > 0
+      - homepage_allowed_hosts | length > 0
+    fail_msg: "Homepage requires project settings, config dir, allowed hosts, and a published port."
+    success_msg: "Homepage configuration is valid."
+  when: homepage_enabled | bool
+
+- name: Ensure Homepage project directory exists
+  ansible.builtin.file:
+    path: "{{ homepage_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: homepage_enabled | bool
+
+- name: Ensure Homepage config directory exists
+  ansible.builtin.file:
+    path: "{{ homepage_config_dir }}"
+    state: directory
+  when: homepage_enabled | bool
+
+- name: Render Homepage compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/homepage.compose.yml.j2"
+    dest: "{{ homepage_project_dir }}/{{ homepage_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: homepage_enabled | bool
+
+- name: Inspect existing Homepage container
+  community.docker.docker_container_info:
+    name: "{{ homepage_container_name }}"
+  register: homepage_existing_container
+  when: homepage_enabled | bool
+
+- name: Determine whether Homepage needs one-time compose adoption
+  ansible.builtin.set_fact:
+    homepage_needs_adoption: >-
+      {{
+        (homepage_existing_container.exists | default(false))
+        and
+        (
+          ((homepage_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != homepage_project_name
+          or
+          ((homepage_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != homepage_service_name
+        )
+      }}
+  when: homepage_enabled | bool
+
+- name: Note Homepage one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Homepage container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - homepage_enabled | bool
+    - ansible_check_mode
+    - homepage_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Homepage container
+  community.docker.docker_container:
+    name: "{{ homepage_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - homepage_enabled | bool
+    - not ansible_check_mode
+    - homepage_needs_adoption | default(false)
+
+- name: Deploy Homepage with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ homepage_project_name }}"
+    project_src: "{{ homepage_project_dir }}"
+    files:
+      - "{{ homepage_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: homepage_compose_result
+  when:
+    - homepage_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Homepage compose actions
+  ansible.builtin.debug:
+    var: homepage_compose_result.actions
+  when:
+    - homepage_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Homepage compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Homepage docker compose deployment."
+  when:
+    - homepage_enabled | bool
+    - ansible_check_mode

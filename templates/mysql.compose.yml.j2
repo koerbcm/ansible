@@ -1,0 +1,17 @@
+services:
+  {{ mysql_service_name }}:
+    image: {{ mysql_image | quote }}
+    container_name: {{ mysql_container_name | quote }}
+    hostname: {{ mysql_hostname | quote }}
+    restart: unless-stopped
+    env_file:
+      - {{ mysql_env_file | quote }}
+    ports:
+      - "{{ mysql_published_port }}:3306"
+    volumes:
+      - {{ mysql_data_dir | quote }}:/var/lib/mysql
+    stop_grace_period: {{ mysql_stop_grace_period | quote }}
+    labels:
+{% if mysql_watchtower_monitor_only | bool %}
+      - com.centurylinklabs.watchtower.monitor-only=true
+{% endif %}

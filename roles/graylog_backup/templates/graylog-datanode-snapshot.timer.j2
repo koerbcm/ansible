@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule Graylog datanode snapshots
+
+[Timer]
+OnCalendar={{ graylog_backup_snapshot_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

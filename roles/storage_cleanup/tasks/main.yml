@@ -1,0 +1,151 @@
+---
+- name: Validate storage cleanup settings
+  ansible.builtin.assert:
+    that:
+      - storage_cleanup_docker_volume_candidates is iterable
+    fail_msg: "storage_cleanup_docker_volume_candidates must be a list."
+    success_msg: "Storage cleanup configuration is valid."
+  when: storage_cleanup_enabled | bool
+
+- name: Check docker availability for cleanup
+  ansible.builtin.command:
+    cmd: "docker version --format {{ '{{.Server.Version}}' }}"
+  register: storage_cleanup_docker_version
+  changed_when: false
+  failed_when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_docker_volume_candidates | length > 0
+    - storage_cleanup_docker_version.rc != 0
+  when: storage_cleanup_enabled | bool
+
+- name: Check whether candidate docker volumes exist
+  ansible.builtin.command:
+    cmd: "docker volume inspect {{ item }}"
+  loop: "{{ storage_cleanup_docker_volume_candidates }}"
+  register: storage_cleanup_volume_inspect
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_docker_version.rc == 0
+
+- name: Build existing/missing candidate lists
+  ansible.builtin.set_fact:
+    storage_cleanup_existing_volumes: >-
+      {{
+        storage_cleanup_volume_inspect.results | default([])
+        | selectattr('rc', 'equalto', 0)
+        | map(attribute='item')
+        | list
+      }}
+    storage_cleanup_missing_volumes: >-
+      {{
+        storage_cleanup_volume_inspect.results | default([])
+        | rejectattr('rc', 'equalto', 0)
+        | map(attribute='item')
+        | list
+      }}
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_docker_version.rc == 0
+
+- name: Check container attachment for existing candidate volumes
+  ansible.builtin.command:
+    cmd: "docker ps -a --filter volume={{ item }} --format {{ '{{.Names}}' }}"
+  loop: "{{ storage_cleanup_existing_volumes | default([]) }}"
+  register: storage_cleanup_volume_usage
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_docker_version.rc == 0
+
+- name: Build in-use/removable candidate lists
+  ansible.builtin.set_fact:
+    storage_cleanup_in_use_volumes: >-
+      {{
+        storage_cleanup_volume_usage.results | default([])
+        | rejectattr('stdout_lines', 'equalto', [])
+        | map(attribute='item')
+        | list
+      }}
+    storage_cleanup_removable_volumes: >-
+      {{
+        storage_cleanup_volume_usage.results | default([])
+        | selectattr('stdout_lines', 'equalto', [])
+        | map(attribute='item')
+        | list
+      }}
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_docker_version.rc == 0
+
+- name: Report storage cleanup dry-run summary
+  ansible.builtin.debug:
+    msg:
+      - "Cleanup apply mode: {{ storage_cleanup_apply | bool }}"
+      - "Candidate volumes: {{ storage_cleanup_docker_volume_candidates | length }}"
+      - "Existing candidate volumes: {{ storage_cleanup_existing_volumes | default([]) | length }}"
+      - "Missing candidate volumes: {{ storage_cleanup_missing_volumes | default([]) | length }}"
+      - "In-use candidate volumes: {{ storage_cleanup_in_use_volumes | default([]) | length }}"
+      - "Removable candidate volumes: {{ storage_cleanup_removable_volumes | default([]) | length }}"
+  when: storage_cleanup_enabled | bool
+
+- name: Report missing candidate volumes
+  ansible.builtin.debug:
+    var: storage_cleanup_missing_volumes
+  when:
+    - storage_cleanup_enabled | bool
+    - (storage_cleanup_missing_volumes | default([]) | length) > 0
+
+- name: Report in-use candidate volumes
+  ansible.builtin.debug:
+    var: storage_cleanup_in_use_volumes
+  when:
+    - storage_cleanup_enabled | bool
+    - (storage_cleanup_in_use_volumes | default([]) | length) > 0
+
+- name: Report removable candidate volumes
+  ansible.builtin.debug:
+    var: storage_cleanup_removable_volumes
+  when:
+    - storage_cleanup_enabled | bool
+    - (storage_cleanup_removable_volumes | default([]) | length) > 0
+
+- name: Abort apply mode when candidate volumes are still in use
+  ansible.builtin.assert:
+    that:
+      - (storage_cleanup_in_use_volumes | default([]) | length) == 0
+    fail_msg: >-
+      Refusing to remove volumes because some candidates are still attached:
+      {{ storage_cleanup_in_use_volumes | default([]) }}
+    success_msg: "No in-use candidate volumes detected."
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_apply | bool
+    - storage_cleanup_abort_if_in_use | bool
+
+- name: Remove removable docker volumes
+  ansible.builtin.command:
+    cmd: "docker volume rm {{ item }}"
+  loop: "{{ storage_cleanup_removable_volumes | default([]) }}"
+  register: storage_cleanup_volume_rm
+  changed_when: true
+  failed_when: storage_cleanup_volume_rm.rc != 0
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_apply | bool
+    - (storage_cleanup_removable_volumes | default([]) | length) > 0
+
+- name: Report removed docker volumes
+  ansible.builtin.debug:
+    msg: "{{ storage_cleanup_volume_rm.results | default([]) | map(attribute='stdout') | list }}"
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_apply | bool
+    - storage_cleanup_volume_rm is defined
+
+- name: Note storage cleanup skipped on host
+  ansible.builtin.debug:
+    msg: "Storage cleanup role is disabled on this host."
+  when: not (storage_cleanup_enabled | bool)

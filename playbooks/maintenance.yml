@@ -1,0 +1,70 @@
+---
+- name: Pre-backup and OS maintenance
+  hosts: maintenance_hosts
+  become: true
+  serial: 1
+  tasks:
+    - name: Run maintenance workflow
+      block:
+        - name: Start Uptime Kuma maintenance window
+          ansible.builtin.include_role:
+            name: uptime_kuma_maintenance
+            apply:
+              tags:
+                - maintenance
+                - maintenance-window
+                - backup-trigger
+                - backup
+                - os-updates
+          vars:
+            uptime_kuma_maintenance_state: start
+          tags:
+            - maintenance
+            - maintenance-window
+            - backup-trigger
+            - backup
+            - os-updates
+
+        - name: Trigger pre-maintenance backups
+          ansible.builtin.include_role:
+            name: backup_trigger
+            apply:
+              tags:
+                - maintenance
+                - backup-trigger
+                - backup
+          tags:
+            - maintenance
+            - backup-trigger
+            - backup
+
+        - name: Run OS maintenance
+          ansible.builtin.include_role:
+            name: os_maintenance
+            apply:
+              tags:
+                - maintenance
+                - os-updates
+          tags:
+            - maintenance
+            - os-updates
+
+      always:
+        - name: End Uptime Kuma maintenance window
+          ansible.builtin.include_role:
+            name: uptime_kuma_maintenance
+            apply:
+              tags:
+                - maintenance
+                - maintenance-window
+                - backup-trigger
+                - backup
+                - os-updates
+          vars:
+            uptime_kuma_maintenance_state: end
+          tags:
+            - maintenance
+            - maintenance-window
+            - backup-trigger
+            - backup
+            - os-updates

@@ -1,0 +1,68 @@
+---
+- name: Validate Watchtower configuration
+  ansible.builtin.assert:
+    that:
+      - watchtower_project_name | length > 0
+      - watchtower_project_dir | length > 0
+      - watchtower_compose_file | length > 0
+      - watchtower_image | length > 0
+      - watchtower_container_name | length > 0
+      - watchtower_service_name | length > 0
+    fail_msg: "Watchtower requires project settings and image/container names."
+    success_msg: "Watchtower configuration is valid."
+  when: watchtower_enabled | bool
+
+- name: Ensure Watchtower project directory exists
+  ansible.builtin.file:
+    path: "{{ watchtower_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: watchtower_enabled | bool
+
+- name: Render Watchtower compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/watchtower.compose.yml.j2"
+    dest: "{{ watchtower_project_dir }}/{{ watchtower_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: watchtower_enabled | bool
+
+- name: Deploy Watchtower with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ watchtower_project_name }}"
+    project_src: "{{ watchtower_project_dir }}"
+    files:
+      - "{{ watchtower_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: watchtower_compose_result
+  when:
+    - watchtower_enabled | bool
+    - watchtower_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Show Watchtower compose actions
+  ansible.builtin.debug:
+    var: watchtower_compose_result.actions
+  when:
+    - watchtower_enabled | bool
+    - watchtower_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Note Watchtower render-only mode
+  ansible.builtin.debug:
+    msg: "Watchtower compose was rendered, but runtime management is disabled."
+  when:
+    - watchtower_enabled | bool
+    - not (watchtower_manage_runtime | bool)
+
+- name: Skip Watchtower compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Watchtower docker compose deployment."
+  when:
+    - watchtower_enabled | bool
+    - watchtower_manage_runtime | bool
+    - ansible_check_mode

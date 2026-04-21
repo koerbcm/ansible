@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule MySQL backups
+
+[Timer]
+OnCalendar={{ mysql_backup_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

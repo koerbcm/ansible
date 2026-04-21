@@ -1,0 +1,14 @@
+services:
+  {{ sabnzbd_service_name }}:
+    image: {{ sabnzbd_image | quote }}
+    container_name: {{ sabnzbd_container_name | quote }}
+    environment:
+      PUID: {{ sabnzbd_puid | string | quote }}
+      PGID: {{ sabnzbd_pgid | string | quote }}
+      TZ: {{ timezone | quote }}
+    ports:
+      - "{{ sabnzbd_published_port }}:8080"
+    restart: unless-stopped
+    volumes:
+      - {{ sabnzbd_config_dir | quote }}:/config
+      - {{ sabnzbd_downloads_dir | quote }}:/downloads

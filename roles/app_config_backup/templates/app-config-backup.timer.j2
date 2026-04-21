@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule application config backups
+
+[Timer]
+OnCalendar={{ app_config_backup_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

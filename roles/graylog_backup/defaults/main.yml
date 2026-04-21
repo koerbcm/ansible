@@ -1,0 +1,27 @@
+---
+graylog_backup_enabled: false
+
+graylog_backup_scripts_dir: /usr/local/bin
+graylog_backup_root: /mnt/backups/graylog
+
+graylog_backup_mongo_enabled: true
+graylog_backup_mongo_container_name: graylog7-mongodb-1
+graylog_backup_mongo_uri: mongodb://localhost:27017/graylog
+graylog_backup_mongo_retention_days: 60
+graylog_backup_mongo_on_calendar: "*-*-* 03:15:00"
+
+graylog_backup_config_enabled: false
+graylog_backup_config_source_dir: /opt/stacks/graylog7
+graylog_backup_config_retention_days: 90
+graylog_backup_config_on_calendar: "*-*-* 03:30:00"
+
+graylog_backup_snapshot_enabled: false
+graylog_backup_snapshot_repo: graylog_local_backup
+graylog_backup_snapshot_root: /mnt/backups/graylog/opensearch-snapshots
+graylog_backup_snapshot_repo_location: /mnt/backups
+graylog_backup_snapshot_root_owner: "999"
+graylog_backup_snapshot_root_group: "999"
+graylog_backup_snapshot_root_mode: "0770"
+graylog_backup_snapshot_url: http://127.0.0.1:9200
+graylog_backup_snapshot_retention_days: 90
+graylog_backup_snapshot_on_calendar: "Sun *-*-* 04:00:00"

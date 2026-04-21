@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule Graylog MongoDB backups
+
+[Timer]
+OnCalendar={{ graylog_backup_mongo_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

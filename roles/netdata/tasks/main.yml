@@ -1,0 +1,100 @@
+---
+- name: Validate Netdata configuration
+  ansible.builtin.assert:
+    that:
+      - netdata_project_dir | length > 0
+      - netdata_compose_file | length > 0
+      - netdata_image | length > 0
+      - netdata_container_name | length > 0
+      - netdata_service_name | length > 0
+      - netdata_claim_url | length > 0
+      - netdata_claim_rooms | length > 0
+      - netdata_claim_token | length > 0
+      - netdata_config_volume_name | length > 0
+      - netdata_cache_volume_name | length > 0
+      - netdata_lib_volume_name | length > 0
+    fail_msg: "Netdata requires project settings, claim settings, and volume names."
+    success_msg: "Netdata configuration is valid."
+  when: netdata_enabled | bool
+
+- name: Ensure Netdata project directory exists
+  ansible.builtin.file:
+    path: "{{ netdata_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: netdata_enabled | bool
+
+- name: Render Netdata compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/netdata.compose.yml.j2"
+    dest: "{{ netdata_project_dir }}/{{ netdata_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: netdata_enabled | bool
+
+- name: Inspect existing Netdata container
+  community.docker.docker_container_info:
+    name: "{{ netdata_container_name }}"
+  register: netdata_existing_container
+  when: netdata_enabled | bool
+
+- name: Determine whether Netdata needs one-time compose adoption
+  ansible.builtin.set_fact:
+    netdata_needs_adoption: >-
+      {{
+        (netdata_existing_container.exists | default(false))
+        and
+        (
+          ((netdata_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != netdata_project_name
+        )
+      }}
+  when: netdata_enabled | bool
+
+- name: Note Netdata one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Netdata container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - netdata_enabled | bool
+    - ansible_check_mode
+    - netdata_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Netdata container
+  community.docker.docker_container:
+    name: "{{ netdata_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - netdata_enabled | bool
+    - not ansible_check_mode
+    - netdata_needs_adoption | default(false)
+
+- name: Deploy Netdata with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ netdata_project_name }}"
+    project_src: "{{ netdata_project_dir }}"
+    files:
+      - "{{ netdata_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: netdata_compose_result
+  when:
+    - netdata_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Netdata compose actions
+  ansible.builtin.debug:
+    var: netdata_compose_result.actions
+  when:
+    - netdata_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Netdata compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Netdata docker compose deployment."
+  when:
+    - netdata_enabled | bool
+    - ansible_check_mode

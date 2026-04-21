@@ -1,0 +1,70 @@
+---
+uptime_kuma_monitor_audit_enabled: true
+uptime_kuma_monitor_audit_delegate_host: localhost
+uptime_kuma_monitor_audit_timeout: 120
+uptime_kuma_monitor_audit_no_log: true
+uptime_kuma_monitor_audit_socket_python: python3
+uptime_kuma_monitor_audit_socket_script_path: "{{ playbook_dir | dirname }}/scripts/uptime_kuma_socket_automation.py"
+uptime_kuma_monitor_audit_server_url: "{{ uptime_kuma_server_url | default('') }}"
+uptime_kuma_monitor_audit_username: "{{ uptime_kuma_username | default('') }}"
+uptime_kuma_monitor_audit_password: "{{ uptime_kuma_password | default('') }}"
+uptime_kuma_monitor_audit_query_retries: 3
+uptime_kuma_monitor_audit_query_retry_delay_seconds: 2
+uptime_kuma_monitor_audit_query_retryable_status_codes:
+  - -1
+  - 429
+  - 500
+  - 502
+  - 503
+
+uptime_kuma_monitor_audit_api_base_url: "{{ uptime_kuma_api_base_url | default('') }}"
+uptime_kuma_monitor_audit_api_auth_path: "{{ uptime_kuma_api_auth_path | default('/login/access-token') }}"
+uptime_kuma_monitor_audit_api_username: "{{ uptime_kuma_api_username | default('') }}"
+uptime_kuma_monitor_audit_api_password: "{{ uptime_kuma_api_password | default('') }}"
+uptime_kuma_monitor_audit_api_access_token: "{{ uptime_kuma_api_access_token | default('') }}"
+uptime_kuma_monitor_audit_api_validate_certs: "{{ uptime_kuma_api_validate_certs | default(true) }}"
+# Wrapper branch compatibility:
+# - legacy/main uses /maintenance
+# - develop uses /maintenances
+uptime_kuma_monitor_audit_api_maintenance_path: /maintenance
+
+uptime_kuma_monitor_audit_expected_tags: []
+uptime_kuma_monitor_audit_expected_monitors: []
+uptime_kuma_monitor_audit_expected_maintenance_scopes: []
+uptime_kuma_monitor_audit_check_unexpected_monitors: true
+
+uptime_kuma_monitor_audit_fail_on_missing_monitors: false
+uptime_kuma_monitor_audit_fail_on_missing_tags: false
+uptime_kuma_monitor_audit_fail_on_monitor_tag_gaps: false
+uptime_kuma_monitor_audit_fail_on_parent_group_gaps: false
+uptime_kuma_monitor_audit_fail_on_monitor_name_gaps: false
+uptime_kuma_monitor_audit_fail_on_monitor_target_gaps: false
+uptime_kuma_monitor_audit_fail_on_maintenance_scope_gaps: false
+
+# Apply mode:
+# - create missing expected tags
+# - apply missing required tags to existing monitors
+# - attach missing monitors to expected maintenance scopes
+# - optionally create monitors that define create_payload
+uptime_kuma_monitor_audit_apply_mode: false
+uptime_kuma_monitor_audit_apply_create_missing_tags: true
+uptime_kuma_monitor_audit_apply_add_missing_required_tags: true
+uptime_kuma_monitor_audit_apply_enforce_parent_groups: true
+uptime_kuma_monitor_audit_apply_enforce_monitor_names: true
+uptime_kuma_monitor_audit_apply_enforce_monitor_targets: true
+uptime_kuma_monitor_audit_apply_enforce_maintenance_scope: true
+uptime_kuma_monitor_audit_apply_create_missing_monitors: false
+uptime_kuma_monitor_audit_apply_delete_unexpected_monitors: false
+uptime_kuma_monitor_audit_apply_recheck_after_changes: true
+uptime_kuma_monitor_audit_apply_retry_delay_seconds: 2
+uptime_kuma_monitor_audit_apply_retries: 3
+uptime_kuma_monitor_audit_apply_reauth_on_403: true
+uptime_kuma_monitor_audit_apply_fail_on_api_errors: true
+
+# Optional per-tag color overrides when creating missing tags.
+# Example:
+#   uptime_kuma_monitor_audit_tag_colors:
+#     critical: "#DC2626"
+#     important: "#2563EB"
+uptime_kuma_monitor_audit_tag_colors: {}
+uptime_kuma_monitor_audit_default_tag_color: "#D97706"

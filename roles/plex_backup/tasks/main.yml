@@ -1,0 +1,75 @@
+---
+- name: Validate Plex backup configuration
+  ansible.builtin.assert:
+    that:
+      - plex_backup_scripts_dir | length > 0
+      - plex_backup_root | length > 0
+      - plex_backup_source_dir | length > 0
+      - plex_backup_destination_dir | length > 0
+      - plex_backup_on_calendar | length > 0
+    fail_msg: "Plex backup requires script path, source dir, backup destination, and schedule."
+    success_msg: "Plex backup configuration is valid."
+  when: plex_backup_enabled | bool
+
+- name: Ensure rsync is installed for Plex backups
+  ansible.builtin.apt:
+    name: rsync
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ base_apt_cache_valid_time | default(3600) }}"
+    lock_timeout: "{{ base_apt_lock_timeout | default(300) }}"
+  when:
+    - plex_backup_enabled | bool
+    - ansible_os_family == "Debian"
+
+- name: Ensure Plex backup directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ plex_backup_scripts_dir }}"
+    - "{{ plex_backup_root }}"
+    - "{{ plex_backup_destination_dir }}"
+  when: plex_backup_enabled | bool
+
+- name: Install Plex backup script
+  ansible.builtin.template:
+    src: plex-backup.sh.j2
+    dest: "{{ plex_backup_scripts_dir }}/plex-backup.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: plex_backup_enabled | bool
+
+- name: Install Plex backup service unit
+  ansible.builtin.template:
+    src: plex-backup.service.j2
+    dest: /etc/systemd/system/plex-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: plex_backup_enabled | bool
+
+- name: Install Plex backup timer unit
+  ansible.builtin.template:
+    src: plex-backup.timer.j2
+    dest: /etc/systemd/system/plex-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: plex_backup_enabled | bool
+
+- name: Reload systemd for Plex backup units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: plex_backup_enabled | bool
+
+- name: Ensure Plex backup timer is enabled and started
+  ansible.builtin.systemd:
+    name: plex-backup.timer
+    enabled: true
+    state: started
+  when: plex_backup_enabled | bool

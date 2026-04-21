@@ -1,0 +1,12 @@
+---
+ntfy_enabled: false
+ntfy_project_dir: "{{ homelab_stack_root }}/ntfy"
+ntfy_project_name: ntfy
+ntfy_compose_file: compose.yml
+ntfy_container_name: ntfy
+ntfy_container_port: 80
+ntfy_published_port: 8081
+ntfy_base_url: ""
+ntfy_config_dir: /srv/ntfy/etc
+ntfy_state_dir: /srv/ntfy/lib
+ntfy_environment_extra: {}

@@ -1,0 +1,103 @@
+---
+- name: Validate Plex configuration
+  ansible.builtin.assert:
+    that:
+      - plex_project_dir | length > 0
+      - plex_compose_file | length > 0
+      - plex_image | length > 0
+      - plex_container_name | length > 0
+      - plex_service_name | length > 0
+      - plex_config_volume_name | length > 0
+      - plex_movies_volume_name | length > 0
+      - plex_transcode_dir | length > 0
+    fail_msg: "Plex requires a project dir, compose file, image, service/container names, and storage definitions."
+    success_msg: "Plex configuration is valid."
+  when: plex_enabled | bool
+
+- name: Ensure Plex project directory exists
+  ansible.builtin.file:
+    path: "{{ plex_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: plex_enabled | bool
+
+- name: Ensure Plex transcode directory exists
+  ansible.builtin.file:
+    path: "{{ plex_transcode_dir }}"
+    state: directory
+  when: plex_enabled | bool
+
+- name: Render Plex compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/plex.compose.yml.j2"
+    dest: "{{ plex_project_dir }}/{{ plex_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: plex_enabled | bool
+
+- name: Inspect existing Plex container
+  community.docker.docker_container_info:
+    name: "{{ plex_container_name }}"
+  register: plex_existing_container
+  when: plex_enabled | bool
+
+- name: Determine whether Plex needs one-time compose adoption
+  ansible.builtin.set_fact:
+    plex_needs_adoption: >-
+      {{
+        (plex_existing_container.exists | default(false))
+        and
+        (
+          ((plex_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != plex_project_name
+        )
+      }}
+  when: plex_enabled | bool
+
+- name: Note Plex one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Plex container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - plex_enabled | bool
+    - ansible_check_mode
+    - plex_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Plex container
+  community.docker.docker_container:
+    name: "{{ plex_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - plex_enabled | bool
+    - not ansible_check_mode
+    - plex_needs_adoption | default(false)
+
+- name: Deploy Plex with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ plex_project_name }}"
+    project_src: "{{ plex_project_dir }}"
+    files:
+      - "{{ plex_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: plex_compose_result
+  when:
+    - plex_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Plex compose actions
+  ansible.builtin.debug:
+    var: plex_compose_result.actions
+  when:
+    - plex_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Plex compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Plex docker compose deployment."
+  when:
+    - plex_enabled | bool
+    - ansible_check_mode

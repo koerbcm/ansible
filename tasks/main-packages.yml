@@ -1,0 +1,21 @@
+---
+- name: Install Main Packages
+  become: true
+  apt:
+    state: present
+    pkg:
+    - vim
+    - curl
+    - wget
+    - net-tools
+    - apt-transport-https
+    - ca-certificates
+    - nfs-common
+
+    - sssd
+    - libpam-sss
+    - libnss-sss
+    - sssd-tools
+
+
+filebeat

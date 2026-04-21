@@ -1,0 +1,17 @@
+services:
+  {{ portainer_service_name }}:
+    image: {{ portainer_image | quote }}
+    container_name: {{ portainer_container_name | quote }}
+    ports:
+      - "{{ portainer_edge_port }}:8000"
+      - "{{ portainer_https_port }}:9443"
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - {{ portainer_data_dir | quote }}:/data
+    logging:
+      driver: {{ portainer_log_driver | quote }}
+      options:
+{% for key, value in portainer_log_options.items() %}
+        {{ key }}: {{ value | quote }}
+{% endfor %}

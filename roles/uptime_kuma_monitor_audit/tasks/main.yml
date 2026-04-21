@@ -1,0 +1,319 @@
+---
+- name: Validate Uptime Kuma monitor audit settings
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - uptime_kuma_monitor_audit_server_url | length > 0
+      - uptime_kuma_monitor_audit_username | length > 0
+      - uptime_kuma_monitor_audit_password | length > 0
+    fail_msg: >-
+      Set uptime_kuma_monitor_audit_server_url,
+      uptime_kuma_monitor_audit_username, and
+      uptime_kuma_monitor_audit_password.
+  when: uptime_kuma_monitor_audit_enabled | bool
+
+- name: Validate expected monitor definitions
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.path_name is defined
+      - item.path_name | string | length > 0
+      - item.required_tags is not defined or (item.required_tags is sequence and item.required_tags is not string)
+    fail_msg: >-
+      Each expected monitor must define a non-empty path_name and, if present,
+      required_tags must be a list.
+  loop: "{{ uptime_kuma_monitor_audit_expected_monitors }}"
+  loop_control:
+    label: "{{ item.path_name | default('undefined') }}"
+  when: uptime_kuma_monitor_audit_enabled | bool
+
+- name: Run Uptime Kuma socket audit/apply helper
+  ansible.builtin.command:
+    argv:
+      - "{{ uptime_kuma_monitor_audit_socket_python }}"
+      - "{{ uptime_kuma_monitor_audit_socket_script_path }}"
+      - audit
+    stdin: >-
+      {{
+        {
+          'server_url': uptime_kuma_monitor_audit_server_url,
+          'username': uptime_kuma_monitor_audit_username,
+          'password': uptime_kuma_monitor_audit_password,
+          'expected_tags': uptime_kuma_monitor_audit_expected_tags,
+          'expected_monitors': uptime_kuma_monitor_audit_expected_monitors,
+          'expected_maintenance_scopes': uptime_kuma_monitor_audit_expected_maintenance_scopes,
+          'check_unexpected_monitors': uptime_kuma_monitor_audit_check_unexpected_monitors,
+          'apply_mode': uptime_kuma_monitor_audit_apply_mode,
+          'apply_create_missing_tags': uptime_kuma_monitor_audit_apply_create_missing_tags,
+          'apply_add_missing_required_tags': uptime_kuma_monitor_audit_apply_add_missing_required_tags,
+          'apply_enforce_parent_groups': uptime_kuma_monitor_audit_apply_enforce_parent_groups,
+          'apply_enforce_monitor_names': uptime_kuma_monitor_audit_apply_enforce_monitor_names,
+          'apply_enforce_monitor_targets': uptime_kuma_monitor_audit_apply_enforce_monitor_targets,
+          'apply_enforce_maintenance_scope': uptime_kuma_monitor_audit_apply_enforce_maintenance_scope,
+          'apply_create_missing_monitors': uptime_kuma_monitor_audit_apply_create_missing_monitors,
+          'apply_delete_unexpected_monitors': uptime_kuma_monitor_audit_apply_delete_unexpected_monitors,
+          'apply_recheck_after_changes': uptime_kuma_monitor_audit_apply_recheck_after_changes,
+          'tag_colors': uptime_kuma_monitor_audit_tag_colors,
+          'default_tag_color': uptime_kuma_monitor_audit_default_tag_color
+        } | to_json
+      }}
+  vars:
+    ansible_command_timeout: "{{ uptime_kuma_monitor_audit_timeout }}"
+  register: uptime_kuma_monitor_audit_socket_result_raw
+  changed_when: false
+  failed_when: uptime_kuma_monitor_audit_socket_result_raw.rc != 0
+  delegate_to: "{{ uptime_kuma_monitor_audit_delegate_host }}"
+  become: false
+  no_log: "{{ uptime_kuma_monitor_audit_no_log | bool }}"
+  when: uptime_kuma_monitor_audit_enabled | bool
+
+- name: Parse socket audit helper output
+  ansible.builtin.set_fact:
+    uptime_kuma_monitor_audit_socket_result: "{{ uptime_kuma_monitor_audit_socket_result_raw.stdout | from_json }}"
+  when: uptime_kuma_monitor_audit_enabled | bool
+
+- name: Validate socket audit helper output
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_socket_result.ok | default(false) | bool
+      - uptime_kuma_monitor_audit_socket_result.result is defined
+    fail_msg: >-
+      Uptime Kuma socket audit helper returned invalid output.
+      Output={{ uptime_kuma_monitor_audit_socket_result_raw.stdout | default('') }}
+  when: uptime_kuma_monitor_audit_enabled | bool
+
+- name: Normalize socket audit result facts
+  ansible.builtin.set_fact:
+    uptime_kuma_monitor_audit_missing_expected_tags: "{{ uptime_kuma_monitor_audit_socket_result.result.missing_expected_tags | default([]) }}"
+    uptime_kuma_monitor_audit_missing_expected_monitors: "{{ uptime_kuma_monitor_audit_socket_result.result.missing_expected_monitors | default([]) }}"
+    uptime_kuma_monitor_audit_monitor_tag_gaps: "{{ uptime_kuma_monitor_audit_socket_result.result.monitor_tag_gaps | default([]) }}"
+    uptime_kuma_monitor_audit_parent_group_gaps: "{{ uptime_kuma_monitor_audit_socket_result.result.parent_group_gaps | default([]) }}"
+    uptime_kuma_monitor_audit_monitor_name_gaps: "{{ uptime_kuma_monitor_audit_socket_result.result.monitor_name_gaps | default([]) }}"
+    uptime_kuma_monitor_audit_monitor_target_gaps: "{{ uptime_kuma_monitor_audit_socket_result.result.monitor_target_gaps | default([]) }}"
+    uptime_kuma_monitor_audit_missing_expected_maintenances: "{{ uptime_kuma_monitor_audit_socket_result.result.missing_expected_maintenances | default([]) }}"
+    uptime_kuma_monitor_audit_maintenance_scope_gaps: "{{ uptime_kuma_monitor_audit_socket_result.result.maintenance_scope_gaps | default([]) }}"
+    uptime_kuma_monitor_audit_untagged_non_group_monitors: "{{ uptime_kuma_monitor_audit_socket_result.result.untagged_non_group_monitors | default([]) }}"
+    uptime_kuma_monitor_audit_unexpected_monitors: "{{ uptime_kuma_monitor_audit_socket_result.result.unexpected_monitors | default([]) }}"
+    uptime_kuma_monitor_audit_apply_changed: "{{ uptime_kuma_monitor_audit_socket_result.result.apply_changed | default(false) | bool }}"
+    uptime_kuma_monitor_audit_apply_api_errors: "{{ uptime_kuma_monitor_audit_socket_result.result.apply_api_errors | default([]) }}"
+    uptime_kuma_monitor_audit_apply_created_tags_count: "{{ uptime_kuma_monitor_audit_socket_result.result.created_tags_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_apply_monitor_tags_count: "{{ uptime_kuma_monitor_audit_socket_result.result.applied_monitor_tags_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_apply_monitor_parent_count: "{{ uptime_kuma_monitor_audit_socket_result.result.applied_monitor_parent_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_apply_renamed_monitors_count: "{{ uptime_kuma_monitor_audit_socket_result.result.renamed_monitors_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_apply_monitor_target_count: "{{ uptime_kuma_monitor_audit_socket_result.result.applied_monitor_target_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_apply_maintenance_attachments_count: "{{ uptime_kuma_monitor_audit_socket_result.result.maintenance_scope_attachments_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_apply_created_monitors_count: "{{ uptime_kuma_monitor_audit_socket_result.result.created_monitors_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_apply_deleted_unexpected_monitors_count: "{{ uptime_kuma_monitor_audit_socket_result.result.deleted_unexpected_monitors_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_expected_tags_count: "{{ uptime_kuma_monitor_audit_socket_result.result.expected_tags_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_expected_monitors_count: "{{ uptime_kuma_monitor_audit_socket_result.result.expected_monitors_count | default(0) | int }}"
+    uptime_kuma_monitor_audit_expected_maintenance_scopes_count: "{{ uptime_kuma_monitor_audit_socket_result.result.expected_maintenance_scopes_count | default(0) | int }}"
+  when: uptime_kuma_monitor_audit_enabled | bool
+
+- name: Report apply-mode actions
+  ansible.builtin.debug:
+    msg:
+      - "Apply mode enabled: {{ uptime_kuma_monitor_audit_apply_mode | bool }}"
+      - "Created tags: {{ uptime_kuma_monitor_audit_apply_created_tags_count }}"
+      - "Applied monitor tags: {{ uptime_kuma_monitor_audit_apply_monitor_tags_count }}"
+      - "Applied monitor parent groups: {{ uptime_kuma_monitor_audit_apply_monitor_parent_count }}"
+      - "Renamed monitors: {{ uptime_kuma_monitor_audit_apply_renamed_monitors_count }}"
+      - "Applied monitor targets: {{ uptime_kuma_monitor_audit_apply_monitor_target_count }}"
+      - "Maintenance scope attachments: {{ uptime_kuma_monitor_audit_apply_maintenance_attachments_count }}"
+      - "Created monitors: {{ uptime_kuma_monitor_audit_apply_created_monitors_count }}"
+      - "Deleted unexpected monitors: {{ uptime_kuma_monitor_audit_apply_deleted_unexpected_monitors_count }}"
+      - "Apply API errors: {{ uptime_kuma_monitor_audit_apply_api_errors | default([]) | length }}"
+      - >-
+        {{
+          'Post-apply gaps were recomputed in this run.'
+          if uptime_kuma_monitor_audit_apply_changed | bool
+          else 'No apply-mode changes were made.'
+        }}
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_apply_mode | bool
+
+- name: Report apply-mode API errors
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_apply_api_errors
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_apply_mode | bool
+    - uptime_kuma_monitor_audit_apply_api_errors | default([]) | length > 0
+
+- name: Enforce apply-mode API success
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_apply_api_errors | default([]) | length == 0
+    fail_msg: >-
+      Apply mode encountered API errors.
+      Inspect uptime_kuma_monitor_audit_apply_api_errors for details.
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_apply_mode | bool
+    - uptime_kuma_monitor_audit_apply_fail_on_api_errors | bool
+
+- name: Report Uptime Kuma monitor audit summary
+  ansible.builtin.debug:
+    msg:
+      - "Expected tags: {{ uptime_kuma_monitor_audit_expected_tags_count }}"
+      - "Expected monitors: {{ uptime_kuma_monitor_audit_expected_monitors_count }}"
+      - "Expected maintenance scopes: {{ uptime_kuma_monitor_audit_expected_maintenance_scopes_count }}"
+      - "Missing expected tags: {{ uptime_kuma_monitor_audit_missing_expected_tags | length }}"
+      - "Missing expected monitors: {{ uptime_kuma_monitor_audit_missing_expected_monitors | length }}"
+      - "Monitors missing required tags: {{ uptime_kuma_monitor_audit_monitor_tag_gaps | length }}"
+      - "Monitors outside expected parent groups: {{ uptime_kuma_monitor_audit_parent_group_gaps | length }}"
+      - "Monitors with non-normalized names: {{ uptime_kuma_monitor_audit_monitor_name_gaps | length }}"
+      - "Monitors with target drift: {{ uptime_kuma_monitor_audit_monitor_target_gaps | length }}"
+      - "Missing maintenance scopes: {{ uptime_kuma_monitor_audit_missing_expected_maintenances | length }}"
+      - "Maintenance scope gaps: {{ uptime_kuma_monitor_audit_maintenance_scope_gaps | length }}"
+      - "Untagged non-group monitors: {{ uptime_kuma_monitor_audit_untagged_non_group_monitors | length }}"
+      - "Unexpected monitors: {{ uptime_kuma_monitor_audit_unexpected_monitors | length }}"
+  when: uptime_kuma_monitor_audit_enabled | bool
+
+- name: Report missing expected tags
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_missing_expected_tags
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_missing_expected_tags | length > 0
+
+- name: Report missing expected monitors
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_missing_expected_monitors
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_missing_expected_monitors | length > 0
+
+- name: Report monitor tag gaps
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_monitor_tag_gaps
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_monitor_tag_gaps | length > 0
+
+- name: Report monitor parent group gaps
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_parent_group_gaps
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_parent_group_gaps | length > 0
+
+- name: Report monitor name gaps
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_monitor_name_gaps
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_monitor_name_gaps | length > 0
+
+- name: Report monitor target gaps
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_monitor_target_gaps
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_monitor_target_gaps | length > 0
+
+- name: Report missing maintenance scope definitions
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_missing_expected_maintenances
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_missing_expected_maintenances | length > 0
+
+- name: Report maintenance scope gaps
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_maintenance_scope_gaps
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_maintenance_scope_gaps | length > 0
+
+- name: Report untagged non-group monitors
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_untagged_non_group_monitors
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_untagged_non_group_monitors | length > 0
+
+- name: Report unexpected monitors
+  ansible.builtin.debug:
+    var: uptime_kuma_monitor_audit_unexpected_monitors
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_check_unexpected_monitors | bool
+    - uptime_kuma_monitor_audit_unexpected_monitors | length > 0
+
+- name: Enforce missing expected tags
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_missing_expected_tags | length == 0
+    fail_msg: "Missing expected Uptime Kuma tags: {{ uptime_kuma_monitor_audit_missing_expected_tags }}"
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_fail_on_missing_tags | bool
+
+- name: Enforce missing expected monitors
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_missing_expected_monitors | length == 0
+    fail_msg: >-
+      Missing expected Uptime Kuma monitors:
+      {{ uptime_kuma_monitor_audit_missing_expected_monitors }}
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_fail_on_missing_monitors | bool
+
+- name: Enforce monitor tag coverage
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_monitor_tag_gaps | length == 0
+    fail_msg: >-
+      Monitors are missing required tags:
+      {{ uptime_kuma_monitor_audit_monitor_tag_gaps }}
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_fail_on_monitor_tag_gaps | bool
+
+- name: Enforce monitor parent group coverage
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_parent_group_gaps | length == 0
+    fail_msg: >-
+      Monitors are outside expected parent groups:
+      {{ uptime_kuma_monitor_audit_parent_group_gaps }}
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_fail_on_parent_group_gaps | bool
+
+- name: Enforce monitor naming coverage
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_monitor_name_gaps | length == 0
+    fail_msg: >-
+      Monitors have non-normalized names:
+      {{ uptime_kuma_monitor_audit_monitor_name_gaps }}
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_fail_on_monitor_name_gaps | bool
+
+- name: Enforce monitor target coverage
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_monitor_target_gaps | length == 0
+    fail_msg: >-
+      Monitors have target drift:
+      {{ uptime_kuma_monitor_audit_monitor_target_gaps }}
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_fail_on_monitor_target_gaps | bool
+
+- name: Enforce maintenance scope coverage
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_monitor_audit_missing_expected_maintenances | length == 0
+      - uptime_kuma_monitor_audit_maintenance_scope_gaps | length == 0
+    fail_msg: >-
+      Maintenance scope gaps detected.
+      Missing maintenances={{ uptime_kuma_monitor_audit_missing_expected_maintenances }};
+      scope_gaps={{ uptime_kuma_monitor_audit_maintenance_scope_gaps }}
+  when:
+    - uptime_kuma_monitor_audit_enabled | bool
+    - uptime_kuma_monitor_audit_fail_on_maintenance_scope_gaps | bool

@@ -1,0 +1,17 @@
+---
+homepage_enabled: false
+homepage_project_name: homepage
+homepage_project_dir: "{{ homelab_stack_root }}/homepage"
+homepage_compose_file: compose.yml
+homepage_image: ghcr.io/gethomepage/homepage:latest
+homepage_container_name: homepage
+homepage_service_name: homepage
+homepage_config_dir: ""
+homepage_published_port: 8080
+homepage_puid: 1000
+homepage_pgid: 1000
+homepage_allowed_hosts: ""
+homepage_log_driver: gelf
+homepage_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"

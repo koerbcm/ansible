@@ -1,0 +1,111 @@
+---
+- name: Validate Lazylibrarian configuration
+  ansible.builtin.assert:
+    that:
+      - lazylibrarian_project_dir | length > 0
+      - lazylibrarian_compose_file | length > 0
+      - lazylibrarian_image | length > 0
+      - lazylibrarian_container_name | length > 0
+      - lazylibrarian_service_name | length > 0
+      - lazylibrarian_config_dir | length > 0
+      - lazylibrarian_books_dir | length > 0
+      - lazylibrarian_downloads_dir | length > 0
+      - lazylibrarian_published_port | int > 0
+    fail_msg: "Lazylibrarian requires project settings, data dirs, and a published port."
+    success_msg: "Lazylibrarian configuration is valid."
+  when: lazylibrarian_enabled | bool
+
+- name: Ensure Lazylibrarian project directory exists
+  ansible.builtin.file:
+    path: "{{ lazylibrarian_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: lazylibrarian_enabled | bool
+
+- name: Ensure Lazylibrarian data directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ lazylibrarian_config_dir }}"
+    - "{{ lazylibrarian_books_dir }}"
+    - "{{ lazylibrarian_downloads_dir }}"
+  when: lazylibrarian_enabled | bool
+
+- name: Render Lazylibrarian compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/lazylibrarian.compose.yml.j2"
+    dest: "{{ lazylibrarian_project_dir }}/{{ lazylibrarian_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: lazylibrarian_enabled | bool
+
+- name: Inspect existing Lazylibrarian container
+  community.docker.docker_container_info:
+    name: "{{ lazylibrarian_container_name }}"
+  register: lazylibrarian_existing_container
+  when: lazylibrarian_enabled | bool
+
+- name: Determine whether Lazylibrarian needs one-time compose adoption
+  ansible.builtin.set_fact:
+    lazylibrarian_needs_adoption: >-
+      {{
+        (lazylibrarian_existing_container.exists | default(false))
+        and
+        (
+          ((lazylibrarian_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != lazylibrarian_project_name
+          or
+          ((lazylibrarian_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != lazylibrarian_service_name
+        )
+      }}
+  when: lazylibrarian_enabled | bool
+
+- name: Note Lazylibrarian one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Lazylibrarian container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - lazylibrarian_enabled | bool
+    - ansible_check_mode
+    - lazylibrarian_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Lazylibrarian container
+  community.docker.docker_container:
+    name: "{{ lazylibrarian_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - lazylibrarian_enabled | bool
+    - not ansible_check_mode
+    - lazylibrarian_needs_adoption | default(false)
+
+- name: Deploy Lazylibrarian with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ lazylibrarian_project_name }}"
+    project_src: "{{ lazylibrarian_project_dir }}"
+    files:
+      - "{{ lazylibrarian_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: lazylibrarian_compose_result
+  when:
+    - lazylibrarian_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Lazylibrarian compose actions
+  ansible.builtin.debug:
+    var: lazylibrarian_compose_result.actions
+  when:
+    - lazylibrarian_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Lazylibrarian compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Lazylibrarian docker compose deployment."
+  when:
+    - lazylibrarian_enabled | bool
+    - ansible_check_mode

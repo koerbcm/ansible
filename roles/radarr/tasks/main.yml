@@ -1,0 +1,111 @@
+---
+- name: Validate Radarr configuration
+  ansible.builtin.assert:
+    that:
+      - radarr_project_dir | length > 0
+      - radarr_compose_file | length > 0
+      - radarr_image | length > 0
+      - radarr_container_name | length > 0
+      - radarr_service_name | length > 0
+      - radarr_config_dir | length > 0
+      - radarr_library_dir | length > 0
+      - radarr_downloads_dir | length > 0
+      - radarr_published_port | int > 0
+    fail_msg: "Radarr requires project settings, data dirs, and a published port."
+    success_msg: "Radarr configuration is valid."
+  when: radarr_enabled | bool
+
+- name: Ensure Radarr project directory exists
+  ansible.builtin.file:
+    path: "{{ radarr_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: radarr_enabled | bool
+
+- name: Ensure Radarr data directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ radarr_config_dir }}"
+    - "{{ radarr_library_dir }}"
+    - "{{ radarr_downloads_dir }}"
+  when: radarr_enabled | bool
+
+- name: Render Radarr compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/radarr.compose.yml.j2"
+    dest: "{{ radarr_project_dir }}/{{ radarr_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: radarr_enabled | bool
+
+- name: Inspect existing Radarr container
+  community.docker.docker_container_info:
+    name: "{{ radarr_container_name }}"
+  register: radarr_existing_container
+  when: radarr_enabled | bool
+
+- name: Determine whether Radarr needs one-time compose adoption
+  ansible.builtin.set_fact:
+    radarr_needs_adoption: >-
+      {{
+        (radarr_existing_container.exists | default(false))
+        and
+        (
+          ((radarr_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != radarr_project_name
+          or
+          ((radarr_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != radarr_service_name
+        )
+      }}
+  when: radarr_enabled | bool
+
+- name: Note Radarr one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Radarr container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - radarr_enabled | bool
+    - ansible_check_mode
+    - radarr_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Radarr container
+  community.docker.docker_container:
+    name: "{{ radarr_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - radarr_enabled | bool
+    - not ansible_check_mode
+    - radarr_needs_adoption | default(false)
+
+- name: Deploy Radarr with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ radarr_project_name }}"
+    project_src: "{{ radarr_project_dir }}"
+    files:
+      - "{{ radarr_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: radarr_compose_result
+  when:
+    - radarr_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Radarr compose actions
+  ansible.builtin.debug:
+    var: radarr_compose_result.actions
+  when:
+    - radarr_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Radarr compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Radarr docker compose deployment."
+  when:
+    - radarr_enabled | bool
+    - ansible_check_mode

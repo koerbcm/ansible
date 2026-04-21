@@ -1,0 +1,236 @@
+---
+- name: Validate storage audit configuration
+  ansible.builtin.assert:
+    that:
+      - storage_audit_mount_path | length > 0
+      - storage_audit_latest_count | int > 0
+    fail_msg: "Storage audit requires a mount path and a positive latest-count value."
+    success_msg: "Storage audit configuration is valid."
+  when: storage_audit_enabled | bool
+
+- name: Check backup mount path presence
+  ansible.builtin.stat:
+    path: "{{ storage_audit_mount_path }}"
+  register: storage_audit_mount_path_stat
+  when: storage_audit_enabled | bool
+
+- name: Gather backup mount details
+  ansible.builtin.command:
+    cmd: "findmnt -T {{ storage_audit_mount_path }}"
+  register: storage_audit_findmnt
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_mount_path_stat.stat.exists | default(false)
+
+- name: Gather backup mount source/type
+  ansible.builtin.command:
+    cmd: "findmnt -T {{ storage_audit_mount_path }} -n -o FSTYPE,SOURCE"
+  register: storage_audit_mount_source
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_mount_path_stat.stat.exists | default(false)
+
+- name: Capture backup filesystem usage
+  ansible.builtin.command:
+    cmd: "df -h {{ storage_audit_mount_path }}"
+  register: storage_audit_df
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_mount_path_stat.stat.exists | default(false)
+
+- name: Discover top-level backup directories
+  ansible.builtin.find:
+    paths: "{{ storage_audit_mount_path }}"
+    file_type: directory
+    depth: 1
+    recurse: false
+  register: storage_audit_backup_top_dirs
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_mount_path_stat.stat.exists | default(false)
+
+- name: Capture top-level backup directory sizes
+  ansible.builtin.command:
+    cmd: "du -sh {{ item }}"
+  loop: "{{ (storage_audit_backup_top_dirs.files | default([]) | map(attribute='path') | list | sort) }}"
+  register: storage_audit_backup_top_dir_sizes
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_mount_path_stat.stat.exists | default(false)
+
+- name: Check known backup roots
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ storage_audit_known_backup_roots }}"
+  register: storage_audit_known_root_stats
+  when: storage_audit_enabled | bool
+
+- name: Capture latest entries in known backup roots
+  ansible.builtin.shell: |
+    set -o pipefail
+    find {{ item | quote }} -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | tail -n {{ storage_audit_latest_count | int }}
+  args:
+    executable: /bin/bash
+  loop: >-
+    {{
+      storage_audit_known_root_stats.results | default([])
+      | selectattr('stat.isdir', 'defined')
+      | selectattr('stat.isdir')
+      | map(attribute='item')
+      | list
+    }}
+  register: storage_audit_latest_backup_entries
+  changed_when: false
+  failed_when: false
+  when: storage_audit_enabled | bool
+
+- name: Check docker availability
+  ansible.builtin.command:
+    cmd: "docker version --format {{ '{{.Server.Version}}' }}"
+  register: storage_audit_docker_version
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+
+- name: Capture docker containers
+  ansible.builtin.command:
+    cmd: "docker ps -a --format table {{ '{{.Names}}' }}\\t{{ '{{.Image}}' }}\\t{{ '{{.Status}}' }}"
+  register: storage_audit_docker_ps
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_docker_version.rc == 0
+
+- name: Capture stopped docker containers
+  ansible.builtin.command:
+    cmd: "docker ps -a --filter status=exited --format table {{ '{{.Names}}' }}\\t{{ '{{.Image}}' }}\\t{{ '{{.Status}}' }}"
+  register: storage_audit_docker_exited
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_docker_version.rc == 0
+
+- name: Capture docker disk usage
+  ansible.builtin.command:
+    cmd: docker system df
+  register: storage_audit_docker_df
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_docker_version.rc == 0
+
+- name: Capture docker volume names
+  ansible.builtin.command:
+    cmd: docker volume ls -q
+  register: storage_audit_docker_volume_names
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_docker_version.rc == 0
+
+- name: Capture docker volume usage by containers
+  ansible.builtin.command:
+    cmd: "docker ps -a --filter volume={{ item }} --format {{ '{{.Names}}' }}"
+  loop: "{{ storage_audit_docker_volume_names.stdout_lines | default([]) }}"
+  register: storage_audit_docker_volume_usage
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_docker_version.rc == 0
+
+- name: Compute unused docker volumes
+  ansible.builtin.set_fact:
+    storage_audit_unused_docker_volumes: >-
+      {{
+        storage_audit_docker_volume_usage.results | default([])
+        | selectattr('stdout_lines', 'equalto', [])
+        | map(attribute='item')
+        | list
+      }}
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_docker_version.rc == 0
+
+- name: Report storage audit summary
+  ansible.builtin.debug:
+    msg:
+      - "Mount path: {{ storage_audit_mount_path }}"
+      - "Mount present: {{ storage_audit_mount_path_stat.stat.exists | default(false) }}"
+      - "Mount source/type: {{ storage_audit_mount_source.stdout | default('unavailable') }}"
+      - "Known backup roots present: {{ (storage_audit_known_root_stats.results | default([]) | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir') | list | length) }}/{{ storage_audit_known_backup_roots | length }}"
+      - "Unused docker volumes detected: {{ storage_audit_unused_docker_volumes | default([]) | length }}"
+  when: storage_audit_enabled | bool
+
+- name: Report backup filesystem usage
+  ansible.builtin.debug:
+    var: storage_audit_df.stdout_lines
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_df is defined
+    - storage_audit_df.stdout_lines is defined
+
+- name: Report top-level backup directory sizes
+  ansible.builtin.debug:
+    msg: "{{ storage_audit_backup_top_dir_sizes.results | default([]) | map(attribute='stdout') | list }}"
+  when: storage_audit_enabled | bool
+
+- name: Report latest entries per known backup root
+  ansible.builtin.debug:
+    msg:
+      - "Root: {{ item.item }}"
+      - "Latest entries: {{ item.stdout_lines | default([]) }}"
+  loop: "{{ storage_audit_latest_backup_entries.results | default([]) }}"
+  when: storage_audit_enabled | bool
+
+- name: Report docker disk usage
+  ansible.builtin.debug:
+    var: storage_audit_docker_df.stdout_lines
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_docker_df is defined
+
+- name: Report stopped docker containers
+  ansible.builtin.debug:
+    var: storage_audit_docker_exited.stdout_lines
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_docker_exited is defined
+
+- name: Report unused docker volumes
+  ansible.builtin.debug:
+    var: storage_audit_unused_docker_volumes
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_docker | bool
+    - storage_audit_unused_docker_volumes is defined
+
+- name: Report service backlog markers
+  ansible.builtin.debug:
+    var: service_backlog
+  when:
+    - storage_audit_enabled | bool
+    - storage_audit_include_service_backlog | bool
+    - service_backlog is defined

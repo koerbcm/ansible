@@ -1,0 +1,6 @@
+all:
+  vars:
+    ansible_user: koerbcm
+  hosts:
+    pi2:
+      ansible_host: PI2_BUILD_IP

@@ -1,0 +1,16 @@
+services:
+  {{ lazylibrarian_service_name }}:
+    image: {{ lazylibrarian_image | quote }}
+    container_name: {{ lazylibrarian_container_name | quote }}
+    environment:
+      PUID: {{ lazylibrarian_puid | string | quote }}
+      PGID: {{ lazylibrarian_pgid | string | quote }}
+      TZ: {{ timezone | quote }}
+      DOCKER_MODS: {{ lazylibrarian_docker_mods | quote }}
+    ports:
+      - "{{ lazylibrarian_published_port }}:5299"
+    restart: unless-stopped
+    volumes:
+      - {{ lazylibrarian_config_dir | quote }}:/config
+      - {{ lazylibrarian_books_dir | quote }}:/books
+      - {{ lazylibrarian_downloads_dir | quote }}:/downloads

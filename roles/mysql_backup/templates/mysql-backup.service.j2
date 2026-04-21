@@ -1,0 +1,9 @@
+[Unit]
+Description=MySQL backup
+{% if homelab_failure_notify_enabled | default(false) | bool %}
+OnFailure={{ homelab_failure_notify_unit_name | default('homelab-unit-failure@') }}%n.service
+{% endif %}
+
+[Service]
+Type=oneshot
+ExecStart={{ mysql_backup_scripts_dir }}/mysql-backup.sh

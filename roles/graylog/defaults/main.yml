@@ -1,0 +1,45 @@
+---
+graylog_enabled: false
+graylog_manage_runtime: false
+
+graylog_project_name: graylog7
+graylog_project_dir: "{{ homelab_stack_root }}/graylog7"
+graylog_compose_file: compose.yml
+graylog_env_file: .env
+
+graylog_mongodb_image: mongo:7.0
+graylog_datanode_image: graylog/graylog-datanode:7.0
+graylog_image: graylog/graylog:7.0
+
+graylog_root_username: gladmin
+graylog_password_secret: "{{ docker1_graylog_password_secret }}"
+graylog_root_password_sha2: "{{ docker1_graylog_root_password_sha2 }}"
+graylog_transport_email_auth_username: "{{ docker1_graylog_transport_email_auth_username }}"
+graylog_transport_email_auth_password: "{{ docker1_graylog_transport_email_auth_password }}"
+
+graylog_http_external_uri: http://10.27.70.11:9000/
+graylog_timezone: America/Denver
+graylog_transport_email_hostname: outbound.mailhop.org
+graylog_transport_email_port: 587
+graylog_transport_from_email: graylog@koerbcm.com
+graylog_transport_subject_prefix: "[graylog]"
+
+graylog_datanode_heap: 15g
+graylog_datanode_insecure_startup: true
+graylog_datanode_override_config_enabled: false
+graylog_datanode_override_config_dir: "{{ graylog_project_dir }}/datanode"
+graylog_datanode_override_config_file: overrideconfig.conf
+graylog_datanode_override_config_container_path: /etc/graylog/datanode/overrideconfig.conf
+graylog_datanode_path_repo: /mnt/backups
+
+graylog_local_mongodb_data_dir: /srv/graylog/mongodb-data
+graylog_local_mongodb_config_dir: /srv/graylog/mongodb-config
+graylog_local_datanode_dir: /srv/graylog/datanode
+graylog_local_graylog_data_dir: /srv/graylog/graylog-data
+graylog_backup_snapshot_root: /mnt/backups/graylog/opensearch-snapshots
+graylog_watchtower_hooks_dir: /mnt/dockerVolumes/docker1/watchtower_hooks
+graylog_mongodb_stop_grace_period: 120s
+graylog_datanode_stop_grace_period: 300s
+graylog_server_stop_grace_period: 120s
+
+graylog_managed_host_paths: []

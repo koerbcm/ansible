@@ -1,0 +1,8 @@
+---
+n8n_backup_enabled: false
+
+n8n_backup_scripts_dir: /usr/local/bin
+n8n_backup_root: /mnt/backups/n8n
+n8n_backup_source_dir: /srv/n8n/data
+n8n_backup_retention_days: 60
+n8n_backup_on_calendar: "*-*-* 01:50:00"

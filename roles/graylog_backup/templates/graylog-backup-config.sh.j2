@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="{{ graylog_backup_root }}/config"
+SOURCE_DIR="{{ graylog_backup_config_source_dir }}"
+TIMESTAMP="$(date +%F-%H%M%S)"
+DEST_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
+
+mkdir -p "${DEST_DIR}"
+
+cp -a "${SOURCE_DIR}/compose.yml" "${DEST_DIR}/"
+
+if [ -f "${SOURCE_DIR}/.env" ]; then
+  cp -a "${SOURCE_DIR}/.env" "${DEST_DIR}/"
+fi
+
+if [ -f "{{ graylog_backup_scripts_dir }}/graylog-datanode-snapshot.sh" ]; then
+  cp -a "{{ graylog_backup_scripts_dir }}/graylog-datanode-snapshot.sh" "${DEST_DIR}/"
+fi
+
+find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ graylog_backup_config_retention_days }} -exec rm -rf {} +

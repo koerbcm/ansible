@@ -1,0 +1,43 @@
+---
+nextcloud_enabled: false
+nextcloud_project_name: nextcloud
+nextcloud_project_dir: "{{ homelab_stack_root }}/nextcloud"
+nextcloud_compose_file: compose.yml
+nextcloud_image: nextcloud:latest
+nextcloud_container_name: nextcloud
+nextcloud_service_name: nextcloud
+nextcloud_html_dir: ""
+nextcloud_data_dir: ""
+nextcloud_data_dir_in_container: /mnt/nextcloud/data/_data
+nextcloud_published_port: 8083
+nextcloud_mysql_host: ""
+nextcloud_mysql_database: nextcloud
+nextcloud_mysql_user: nextcloud
+nextcloud_mysql_password: ""
+nextcloud_admin_user: ""
+nextcloud_admin_password: ""
+nextcloud_redis_image: redis:alpine
+nextcloud_redis_container_name: nextcloud-redis
+nextcloud_redis_service_name: redis
+nextcloud_redis_volume_name: nextcloud_redisdata
+nextcloud_mail_domain: ""
+nextcloud_mail_from_address: nextcloud
+nextcloud_smtp_host: ""
+nextcloud_smtp_port: 587
+nextcloud_smtp_name: ""
+nextcloud_smtp_password: ""
+nextcloud_smtp_secure: tls
+nextcloud_trusted_domains: ""
+nextcloud_trusted_proxies: ""
+nextcloud_overwrite_cli_url: ""
+nextcloud_overwrite_protocol: https
+nextcloud_apache_disable_rewrite_ip: "1"
+nextcloud_php_memory_limit: 512M
+nextcloud_php_upload_limit: 512M
+nextcloud_php_opcache_memory_consumption: "128"
+nextcloud_apache_body_limit: "1073741824"
+nextcloud_watchtower_monitor_only: true
+nextcloud_log_driver: gelf
+nextcloud_log_options:
+  gelf-address: "{{ docker_gelf_address }}"
+  tag: "{{ '{{.Name}}/{{.ID}}' }}"

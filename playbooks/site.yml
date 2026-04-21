@@ -1,0 +1,292 @@
+---
+- name: Baseline host configuration
+  hosts: homelab
+  become: true
+  roles:
+    - role: base
+      tags:
+        - base
+        - users
+    - role: common_services
+      tags:
+        - common
+        - services
+
+- name: Docker engine
+  hosts: docker_hosts
+  become: true
+  roles:
+    - role: docker_engine
+      tags:
+        - docker
+
+- name: Homelab failure notifications
+  hosts: homelab
+  become: true
+  roles:
+    - role: homelab_failure_notify
+      tags:
+        - alerts
+        - failure-notify
+        - backup
+
+- name: NFS client mounts
+  hosts: nfs_clients
+  become: true
+  roles:
+    - role: nfs_mounts
+      tags:
+        - nfs
+
+- name: Identity client configuration
+  hosts: identity_clients
+  become: true
+  roles:
+    - role: identity_client
+      tags:
+        - identity
+        - sssd
+        - ldap
+
+- name: Legacy service cleanup
+  hosts: legacy_cleanup_hosts
+  become: true
+  roles:
+    - role: legacy_cleanup
+      tags:
+        - cleanup
+        - legacy
+
+- name: Host log forwarding
+  hosts: log_forwarder_hosts
+  become: true
+  roles:
+    - role: log_forwarder
+      tags:
+        - logging
+        - rsyslog
+
+- name: Containerized applications
+  hosts: ntfy_hosts
+  become: true
+  roles:
+    - role: ntfy
+      tags:
+        - ntfy
+        - apps
+
+- name: Radarr
+  hosts: radarr_hosts
+  become: true
+  roles:
+    - role: radarr
+      tags:
+        - radarr
+        - apps
+
+- name: Sonarr
+  hosts: sonarr_hosts
+  become: true
+  roles:
+    - role: sonarr
+      tags:
+        - sonarr
+        - apps
+
+- name: SABnzbd
+  hosts: sabnzbd_hosts
+  become: true
+  roles:
+    - role: sabnzbd
+      tags:
+        - sabnzbd
+        - apps
+
+- name: Lazylibrarian
+  hosts: lazylibrarian_hosts
+  become: true
+  roles:
+    - role: lazylibrarian
+      tags:
+        - lazylibrarian
+        - apps
+
+- name: Plex media server
+  hosts: plex_hosts
+  become: true
+  roles:
+    - role: plex
+      tags:
+        - plex
+        - apps
+
+- name: PostgreSQL containers
+  hosts: postgresql_hosts
+  become: true
+  roles:
+    - role: postgresql
+      tags:
+        - postgresql
+        - apps
+
+- name: Netdata monitoring
+  hosts: netdata_hosts
+  become: true
+  roles:
+    - role: netdata
+      tags:
+        - netdata
+        - apps
+
+- name: Homepage dashboard
+  hosts: homepage_hosts
+  become: true
+  roles:
+    - role: homepage
+      tags:
+        - homepage
+        - apps
+
+- name: Ombi
+  hosts: ombi_hosts
+  become: true
+  roles:
+    - role: ombi
+      tags:
+        - ombi
+        - apps
+
+- name: IT-Tools
+  hosts: it_tools_hosts
+  become: true
+  roles:
+    - role: it_tools
+      tags:
+        - it-tools
+        - apps
+
+- name: n8n
+  hosts: n8n_hosts
+  become: true
+  roles:
+    - role: n8n
+      tags:
+        - n8n
+        - apps
+
+- name: Portainer
+  hosts: portainer_hosts
+  become: true
+  roles:
+    - role: portainer
+      tags:
+        - portainer-server
+        - apps
+
+- name: Nextcloud
+  hosts: nextcloud_hosts
+  become: true
+  roles:
+    - role: nextcloud
+      tags:
+        - nextcloud
+        - apps
+
+- name: Paperless
+  hosts: paperless_hosts
+  become: true
+  roles:
+    - role: paperless
+      tags:
+        - paperless
+        - apps
+
+- name: MySQL
+  hosts: mysql_hosts
+  become: true
+  roles:
+    - role: mysql
+      tags:
+        - mysql
+        - apps
+
+- name: Watchtower
+  hosts: watchtower_hosts
+  become: true
+  roles:
+    - role: watchtower
+      tags:
+        - watchtower
+        - apps
+
+- name: Portainer agent
+  hosts: portainer_agent_hosts
+  become: true
+  roles:
+    - role: portainer_agent
+      tags:
+        - portainer
+        - apps
+
+- name: Graylog stack files
+  hosts: graylog_hosts
+  become: true
+  roles:
+    - role: graylog
+      tags:
+        - graylog
+        - apps
+
+- name: Graylog backup jobs
+  hosts: graylog_backup_hosts
+  become: true
+  roles:
+    - role: graylog_backup
+      tags:
+        - graylog-backup
+        - backup
+
+- name: PostgreSQL backup jobs
+  hosts: postgresql_backup_hosts
+  become: true
+  roles:
+    - role: postgresql_backup
+      tags:
+        - postgresql-backup
+        - backup
+
+- name: MySQL backup jobs
+  hosts: mysql_backup_hosts
+  become: true
+  roles:
+    - role: mysql_backup
+      tags:
+        - mysql-backup
+        - backup
+
+- name: n8n backup jobs
+  hosts: n8n_backup_hosts
+  become: true
+  roles:
+    - role: n8n_backup
+      tags:
+        - n8n-backup
+        - backup
+
+- name: Plex backup jobs
+  hosts: plex_backup_hosts
+  become: true
+  roles:
+    - role: plex_backup
+      tags:
+        - plex-backup
+        - backup
+
+- name: Application config backup jobs
+  hosts: app_config_backup_hosts
+  become: true
+  roles:
+    - role: app_config_backup
+      tags:
+        - app-config-backup
+        - backup

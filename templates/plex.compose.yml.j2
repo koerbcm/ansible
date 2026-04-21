@@ -1,0 +1,27 @@
+services:
+  plex:
+    image: {{ plex_image | quote }}
+    container_name: {{ plex_container_name | quote }}
+    network_mode: {{ plex_network_mode | quote }}
+    environment:
+      PUID: {{ plex_puid | string | quote }}
+      PGID: {{ plex_pgid | string | quote }}
+      TZ: {{ timezone | quote }}
+      VERSION: {{ plex_version | quote }}
+    restart: unless-stopped
+    volumes:
+      - {{ plex_config_volume_name | quote }}:/config
+      - {{ plex_movies_volume_name | quote }}:/movies
+      - {{ plex_transcode_dir | quote }}:/transcode
+{% if plex_devices | length > 0 %}
+    devices:
+{% for device in plex_devices %}
+      - {{ device | quote }}
+{% endfor %}
+{% endif %}
+
+volumes:
+  {{ plex_config_volume_name }}:
+    name: {{ plex_config_volume_name | quote }}
+  {{ plex_movies_volume_name }}:
+    name: {{ plex_movies_volume_name | quote }}

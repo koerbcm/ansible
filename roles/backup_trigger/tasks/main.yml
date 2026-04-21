@@ -1,0 +1,16 @@
+---
+- name: Run pre-maintenance backup services sequentially
+  ansible.builtin.include_tasks: run_service.yml
+  loop: "{{ maintenance_pre_backup_services }}"
+  loop_control:
+    loop_var: backup_service_name
+  when:
+    - backup_trigger_enabled | bool
+    - maintenance_pre_backup_services | length > 0
+
+- name: Report hosts with no pre-maintenance backup services
+  ansible.builtin.debug:
+    msg: "No pre-maintenance backup services are configured for {{ inventory_hostname }}."
+  when:
+    - backup_trigger_enabled | bool
+    - maintenance_pre_backup_services | length == 0

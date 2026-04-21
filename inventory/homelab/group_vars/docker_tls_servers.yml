@@ -1,0 +1,7 @@
+---
+docker_daemon_hosts:
+  - "tcp://0.0.0.0:2376"
+  - "unix:///var/run/docker.sock"
+
+docker_tls_enabled: true
+docker_tls_verify: true

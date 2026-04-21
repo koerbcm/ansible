@@ -1,0 +1,8 @@
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    volumes:
+      - /volume1/dockerVolumes/nas/uptimeKuma_data:/app/data
+    ports:
+      - "9000:3001"
+    restart: unless-stopped

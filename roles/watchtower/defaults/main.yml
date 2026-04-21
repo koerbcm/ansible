@@ -1,0 +1,18 @@
+---
+watchtower_enabled: false
+watchtower_manage_runtime: false
+
+watchtower_project_name: watchtower
+watchtower_project_dir: "{{ homelab_stack_root }}/watchtower"
+watchtower_compose_file: compose.yml
+
+watchtower_image: containrrr/watchtower:latest
+watchtower_container_name: watchtower
+watchtower_service_name: watchtower
+watchtower_schedule: "0 0 4 * * *"
+watchtower_cleanup: true
+watchtower_monitor_only: false
+watchtower_enable_lifecycle_hooks: true
+watchtower_mounts:
+  - /var/run/docker.sock:/var/run/docker.sock
+watchtower_environment: {}

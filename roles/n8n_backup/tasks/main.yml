@@ -1,0 +1,62 @@
+---
+- name: Validate n8n backup configuration
+  ansible.builtin.assert:
+    that:
+      - n8n_backup_scripts_dir | length > 0
+      - n8n_backup_root | length > 0
+      - n8n_backup_source_dir | length > 0
+      - n8n_backup_on_calendar | length > 0
+    fail_msg: "n8n backup requires script path, backup root, source dir, and schedule."
+    success_msg: "n8n backup configuration is valid."
+  when: n8n_backup_enabled | bool
+
+- name: Ensure n8n backup directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ n8n_backup_scripts_dir }}"
+    - "{{ n8n_backup_root }}"
+  when: n8n_backup_enabled | bool
+
+- name: Install n8n backup script
+  ansible.builtin.template:
+    src: n8n-backup.sh.j2
+    dest: "{{ n8n_backup_scripts_dir }}/n8n-backup.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: n8n_backup_enabled | bool
+
+- name: Install n8n backup service unit
+  ansible.builtin.template:
+    src: n8n-backup.service.j2
+    dest: /etc/systemd/system/n8n-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: n8n_backup_enabled | bool
+
+- name: Install n8n backup timer unit
+  ansible.builtin.template:
+    src: n8n-backup.timer.j2
+    dest: /etc/systemd/system/n8n-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: n8n_backup_enabled | bool
+
+- name: Reload systemd for n8n backup units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: n8n_backup_enabled | bool
+
+- name: Ensure n8n backup timer is enabled and started
+  ansible.builtin.systemd:
+    name: n8n-backup.timer
+    enabled: true
+    state: started
+  when: n8n_backup_enabled | bool

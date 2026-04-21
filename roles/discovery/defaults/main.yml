@@ -1,0 +1,36 @@
+---
+discovery_artifact_root: "{{ playbook_dir | dirname }}/artifacts/discovery"
+
+discovery_focus_services:
+  - docker
+  - containerd
+  - sssd
+  - rsyslog
+  - nginx
+  - ufw
+  - avahi-daemon
+  - plexmediaserver
+  - radarr
+  - sonarr
+  - sabnzbd
+  - sabnzbdplus
+
+discovery_config_files:
+  - /etc/fstab
+  - /etc/hosts
+  - /etc/sudoers
+  - /etc/ssh/sshd_config
+  - /etc/sssd/sssd.conf
+  - /etc/docker/daemon.json
+  - /etc/rsyslog.conf
+  - /etc/default/ufw
+  - /etc/nsswitch.conf
+  - /etc/crontab
+  - /etc/apt/sources.list.d/docker.list
+
+discovery_file_globs:
+  - /etc/rsyslog.d/*.conf
+  - /etc/cron.d/*
+  - /etc/update-motd.d/*
+  - /opt/scripts/*
+  - /usr/local/bin/*

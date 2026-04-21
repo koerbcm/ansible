@@ -1,0 +1,196 @@
+---
+- name: Validate Graylog backup configuration
+  ansible.builtin.assert:
+    that:
+      - graylog_backup_scripts_dir | length > 0
+      - graylog_backup_root | length > 0
+      - graylog_backup_mongo_container_name | length > 0
+      - graylog_backup_mongo_uri | length > 0
+      - graylog_backup_mongo_on_calendar | length > 0
+      - graylog_backup_config_source_dir | length > 0
+      - graylog_backup_config_on_calendar | length > 0
+      - graylog_backup_snapshot_repo | length > 0
+      - graylog_backup_snapshot_root | length > 0
+      - graylog_backup_snapshot_repo_location | length > 0
+      - graylog_backup_snapshot_root_owner | string | length > 0
+      - graylog_backup_snapshot_root_group | string | length > 0
+      - graylog_backup_snapshot_root_mode | length > 0
+      - graylog_backup_snapshot_url | length > 0
+      - graylog_backup_snapshot_on_calendar | length > 0
+    fail_msg: "Graylog backup requires script paths, backup paths, schedules, and source settings."
+    success_msg: "Graylog backup configuration is valid."
+  when: graylog_backup_enabled | bool
+
+- name: Ensure Graylog backup script and archive directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ graylog_backup_scripts_dir }}"
+    - "{{ graylog_backup_root }}"
+    - "{{ graylog_backup_root }}/mongo"
+    - "{{ graylog_backup_root }}/config"
+  when: graylog_backup_enabled | bool
+
+- name: Ensure Graylog snapshot repository directory exists with datanode write access
+  ansible.builtin.file:
+    path: "{{ graylog_backup_snapshot_root }}"
+    state: directory
+    owner: "{{ graylog_backup_snapshot_root_owner }}"
+    group: "{{ graylog_backup_snapshot_root_group }}"
+    mode: "{{ graylog_backup_snapshot_root_mode }}"
+  when: graylog_backup_enabled | bool
+
+- name: Check Graylog config backup source directory
+  ansible.builtin.stat:
+    path: "{{ graylog_backup_config_source_dir }}"
+  register: graylog_backup_config_source_dir_stat
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_config_enabled | bool
+
+- name: Validate Graylog config backup source exists when enabled
+  ansible.builtin.assert:
+    that:
+      - graylog_backup_config_source_dir_stat.stat.exists
+      - graylog_backup_config_source_dir_stat.stat.isdir
+    fail_msg: >-
+      Graylog config backups are enabled, but {{ graylog_backup_config_source_dir }}
+      does not exist yet. Create a stable Graylog stack directory there first.
+    success_msg: "Graylog config backup source directory exists."
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_config_enabled | bool
+
+- name: Install Graylog Mongo backup script
+  ansible.builtin.template:
+    src: graylog-backup-mongo.sh.j2
+    dest: "{{ graylog_backup_scripts_dir }}/graylog-backup-mongo.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: graylog_backup_enabled | bool
+
+- name: Install Graylog config backup script
+  ansible.builtin.template:
+    src: graylog-backup-config.sh.j2
+    dest: "{{ graylog_backup_scripts_dir }}/graylog-backup-config.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: graylog_backup_enabled | bool
+
+- name: Install Graylog datanode snapshot script
+  ansible.builtin.template:
+    src: graylog-datanode-snapshot.sh.j2
+    dest: "{{ graylog_backup_scripts_dir }}/graylog-datanode-snapshot.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: graylog_backup_enabled | bool
+
+- name: Install Graylog Mongo backup service unit
+  ansible.builtin.template:
+    src: graylog-backup-mongo.service.j2
+    dest: /etc/systemd/system/graylog-backup-mongo.service
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_mongo_enabled | bool
+  notify: Reload systemd
+
+- name: Install Graylog Mongo backup timer unit
+  ansible.builtin.template:
+    src: graylog-backup-mongo.timer.j2
+    dest: /etc/systemd/system/graylog-backup-mongo.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_mongo_enabled | bool
+  notify: Reload systemd
+
+- name: Install Graylog config backup service unit
+  ansible.builtin.template:
+    src: graylog-backup-config.service.j2
+    dest: /etc/systemd/system/graylog-backup-config.service
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_config_enabled | bool
+  notify: Reload systemd
+
+- name: Install Graylog config backup timer unit
+  ansible.builtin.template:
+    src: graylog-backup-config.timer.j2
+    dest: /etc/systemd/system/graylog-backup-config.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_config_enabled | bool
+  notify: Reload systemd
+
+- name: Install Graylog datanode snapshot service unit
+  ansible.builtin.template:
+    src: graylog-datanode-snapshot.service.j2
+    dest: /etc/systemd/system/graylog-datanode-snapshot.service
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_snapshot_enabled | bool
+  notify: Reload systemd
+
+- name: Install Graylog datanode snapshot timer unit
+  ansible.builtin.template:
+    src: graylog-datanode-snapshot.timer.j2
+    dest: /etc/systemd/system/graylog-datanode-snapshot.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_snapshot_enabled | bool
+  notify: Reload systemd
+
+- name: Flush systemd reload before enabling Graylog backup timers
+  ansible.builtin.meta: flush_handlers
+  when: graylog_backup_enabled | bool
+
+- name: Ensure Graylog Mongo backup timer is enabled and started
+  ansible.builtin.systemd_service:
+    name: graylog-backup-mongo.timer
+    enabled: true
+    state: started
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_mongo_enabled | bool
+
+- name: Ensure Graylog config backup timer is enabled and started
+  ansible.builtin.systemd_service:
+    name: graylog-backup-config.timer
+    enabled: true
+    state: started
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_config_enabled | bool
+
+- name: Ensure Graylog datanode snapshot timer is enabled and started
+  ansible.builtin.systemd_service:
+    name: graylog-datanode-snapshot.timer
+    enabled: true
+    state: started
+  when:
+    - graylog_backup_enabled | bool
+    - graylog_backup_snapshot_enabled | bool

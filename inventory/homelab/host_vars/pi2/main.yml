@@ -1,0 +1,69 @@
+---
+# Pi 5 cutover completed on 2026-04-13.
+# `pi-bootstrap` was a temporary bootstrap admin and should remain absent.
+
+base_extra_users: []
+
+nfs_mounts:
+  - path: /mnt/dockerVolumes
+    src: 10.27.27.9:/volume1/dockerVolumes
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/plexLibrary
+    src: 10.27.27.9:/volume1/Plex/Library
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/plexStaging
+    src: 10.27.27.9:/volume1/Plex/staging
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/backups
+    src: 10.27.27.9:/volume1/backups
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+
+ntfy_base_url: https://ntfy.koerbcm.com
+ntfy_enabled: true
+ntfy_project_dir: /opt/stacks/ntfy
+ntfy_config_dir: /mnt/dockerVolumes/pi2/ntfy_data
+ntfy_state_dir: /mnt/dockerVolumes/pi2/ntfy_lib
+ntfy_published_port: 8081
+ntfy_environment_extra:
+  NTFY_AUTH_DEFAULT_ACCESS: deny-all
+  NTFY_BEHIND_PROXY: "true"
+  NTFY_ENABLE_LOGIN: "true"
+
+maintenance_pre_backup_services: []
+
+legacy_cleanup_enabled: true
+legacy_cleanup_services:
+  - radarr
+  - sonarr
+  - sabnzbd
+  - sabnzbdplus
+  - nginx
+legacy_cleanup_packages:
+  - radarr
+  - sonarr
+  - sabnzbdplus
+  - nginx
+legacy_cleanup_users:
+  - plex
+  - pi-bootstrap
+
+portainer_agent_enabled: true
+portainer_agent_project_dir: /opt/stacks/portainer-agent
+
+host_application_inventory:
+  docker:
+    - name: ntfy
+      role: ntfy
+      managed_by_ansible: true
+    - name: portainer_agent
+      role: portainer_agent
+      managed_by_ansible: true
+  legacy_host_services:
+    - radarr
+    - sonarr
+    - sabnzbdplus
+    - nginx

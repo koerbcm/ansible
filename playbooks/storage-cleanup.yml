@@ -1,0 +1,10 @@
+---
+- name: Storage cleanup for approved stale docker volumes
+  hosts: maintenance_hosts
+  become: true
+  serial: 1
+  roles:
+    - role: storage_cleanup
+      tags:
+        - storage-cleanup
+        - cleanup

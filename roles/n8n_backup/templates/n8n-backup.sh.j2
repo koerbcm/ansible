@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="{{ n8n_backup_root }}"
+SOURCE_DIR="{{ n8n_backup_source_dir }}"
+DEST_DIR="${BACKUP_ROOT}/$(date +%F-%H%M%S)"
+
+mkdir -p "${DEST_DIR}"
+
+tar -C "${SOURCE_DIR}" -czf "${DEST_DIR}/n8n-data.tar.gz" .
+
+find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ n8n_backup_retention_days }} -exec rm -rf {} +

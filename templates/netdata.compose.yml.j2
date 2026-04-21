@@ -1,0 +1,41 @@
+services:
+  {{ netdata_service_name }}:
+    image: {{ netdata_image | quote }}
+    container_name: {{ netdata_container_name | quote }}
+    network_mode: host
+    pid: host
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+      - label=disable
+    environment:
+      NETDATA_CLAIM_TOKEN: {{ netdata_claim_token | quote }}
+      NETDATA_CLAIM_URL: {{ netdata_claim_url | quote }}
+      NETDATA_CLAIM_ROOMS: {{ netdata_claim_rooms | quote }}
+      NETDATA_LISTENER_PORT: {{ netdata_listener_port | string | quote }}
+      DOCKER_GRP: netdata
+      DOCKER_USR: netdata
+    restart: unless-stopped
+    volumes:
+      - {{ netdata_config_volume_name | quote }}:/etc/netdata
+      - {{ netdata_cache_volume_name | quote }}:/var/cache/netdata
+      - {{ netdata_lib_volume_name | quote }}:/var/lib/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/log:/host/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host/root:ro,rslave
+
+volumes:
+  {{ netdata_config_volume_name }}:
+    name: {{ netdata_config_volume_name | quote }}
+  {{ netdata_cache_volume_name }}:
+    name: {{ netdata_cache_volume_name | quote }}
+  {{ netdata_lib_volume_name }}:
+    name: {{ netdata_lib_volume_name | quote }}

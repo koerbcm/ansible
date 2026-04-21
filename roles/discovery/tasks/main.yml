@@ -1,0 +1,160 @@
+---
+- name: Ensure local discovery artifact directory exists
+  ansible.builtin.file:
+    path: "{{ discovery_artifact_root }}/{{ inventory_hostname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Gather package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Write package facts artifact
+  ansible.builtin.copy:
+    dest: "{{ discovery_artifact_root }}/{{ inventory_hostname }}/packages.json"
+    content: "{{ ansible_facts.packages | to_nice_json }}"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+
+- name: Write service facts artifact
+  ansible.builtin.copy:
+    dest: "{{ discovery_artifact_root }}/{{ inventory_hostname }}/services.json"
+    content: "{{ ansible_facts.services | to_nice_json }}"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+
+- name: Collect command-based discovery data
+  ansible.builtin.shell: "{{ item.command }}"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+  register: discovery_command_results
+  loop:
+    - name: getent-passwd
+      command: getent passwd
+    - name: getent-group
+      command: getent group
+    - name: mounts
+      command: mount
+    - name: fstab
+      command: cat /etc/fstab
+    - name: enabled-units
+      command: systemctl list-unit-files --state=enabled
+    - name: all-service-units
+      command: systemctl list-units --type=service --all --no-pager
+    - name: focused-services
+      command: "systemctl list-unit-files --type=service --no-pager | egrep '{{ discovery_focus_services | join(\"|\") }}' || true"
+    - name: focused-service-definitions
+      command: "for svc in {{ discovery_focus_services | join(' ') }}; do systemctl cat ${svc}.service 2>/dev/null && printf '\\n=====\\n'; done || true"
+    - name: docker-ps
+      command: !unsafe "docker ps --format '{{.Names}}\\t{{.Image}}\\t{{.Status}}'"
+    - name: docker-ps-all
+      command: !unsafe "docker ps -a --format '{{.Names}}\\t{{.Image}}\\t{{.Status}}'"
+    - name: docker-images
+      command: !unsafe "docker images --format '{{.Repository}}:{{.Tag}}\\t{{.ID}}\\t{{.Size}}'"
+    - name: docker-inspect-all
+      command: "docker inspect $(docker ps -aq) 2>/dev/null || true"
+    - name: root-crontab
+      command: crontab -l -u root
+    - name: passwd-koerbcm
+      command: getent passwd koerbcm
+    - name: passwd-plex
+      command: getent passwd plex
+    - name: groups-koerbcm
+      command: id koerbcm
+    - name: groups-plex
+      command: id plex
+    - name: authorized-keys
+      command: find /home /root -maxdepth 3 -path '*/.ssh/authorized_keys' -type f -print -exec sed -n '1,200p' {} \;
+    - name: sudoers-dropins
+      command: find /etc/sudoers.d -maxdepth 1 -type f -print -exec sed -n '1,200p' {} \;
+    - name: ufw-status
+      command: ufw status verbose
+    - name: apt-sources-docker
+      command: grep -Rni "download.docker.com" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true
+    - name: media-path-hints
+      command: find /opt /srv /mnt -maxdepth 3 \( -iname '*radarr*' -o -iname '*sonarr*' -o -iname '*sabnzbd*' -o -iname '*sabnzdb*' -o -iname '*plex*' -o -iname '*portainer*' -o -iname '*ntfy*' \) 2>/dev/null | sort
+    - name: compose-path-hints
+      command: find /opt /srv /home -maxdepth 4 \( -name 'compose.yml' -o -name 'compose.yaml' -o -name 'docker-compose.yml' -o -name 'docker-compose.yaml' \) 2>/dev/null | sort
+    - name: custom-script-hints
+      command: find /opt /usr/local/bin -maxdepth 3 -type f 2>/dev/null | sort
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Write command discovery artifacts
+  ansible.builtin.copy:
+    dest: "{{ discovery_artifact_root }}/{{ inventory_hostname }}/{{ item.item.name }}.txt"
+    content: |
+      # rc={{ item.rc }}
+      {{ item.stdout | default('') }}
+      {% if item.stderr | default('') %}
+      ## stderr
+      {{ item.stderr }}
+      {% endif %}
+    mode: "0644"
+  loop: "{{ discovery_command_results.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  delegate_to: localhost
+  become: false
+
+- name: Stat important configuration files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ discovery_config_files }}"
+  register: discovery_file_stats
+
+- name: Slurp important configuration files
+  ansible.builtin.slurp:
+    path: "{{ item.item }}"
+  loop: "{{ discovery_file_stats.results }}"
+  when: item.stat.exists
+  register: discovery_file_contents
+
+- name: Find matching config and script files
+  ansible.builtin.find:
+    paths: "{{ item | dirname }}"
+    patterns: "{{ item | basename }}"
+    file_type: file
+    recurse: false
+  loop: "{{ discovery_file_globs }}"
+  register: discovery_glob_finds
+  failed_when: false
+
+- name: Slurp discovered config and script files
+  ansible.builtin.slurp:
+    path: "{{ item.path }}"
+  loop: "{{ discovery_glob_finds.results | selectattr('files', 'defined') | map(attribute='files') | flatten }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: discovery_glob_contents
+
+- name: Write configuration file artifacts
+  ansible.builtin.copy:
+    dest: "{{ discovery_artifact_root }}/{{ inventory_hostname }}/{{ item.item.item | regex_replace('^/', '') | regex_replace('/', '__') }}"
+    content: "{{ item.content | b64decode }}"
+    mode: "0644"
+  loop: "{{ discovery_file_contents.results | default([]) | selectattr('content', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.item }}"
+  delegate_to: localhost
+  become: false
+
+- name: Write discovered glob artifacts
+  ansible.builtin.copy:
+    dest: "{{ discovery_artifact_root }}/{{ inventory_hostname }}/{{ (item.source | default(item.item.path)) | regex_replace('^/', '') | regex_replace('/', '__') }}"
+    content: "{{ item.content | b64decode }}"
+    mode: "0644"
+  loop: "{{ discovery_glob_contents.results | default([]) | selectattr('content', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.source | default(item.item.path) }}"
+  delegate_to: localhost
+  become: false

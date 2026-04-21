@@ -1,0 +1,27 @@
+---
+- name: Stop and disable legacy services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop: "{{ legacy_cleanup_services }}"
+  failed_when: false
+  when: legacy_cleanup_enabled | bool
+
+- name: Remove legacy packages
+  ansible.builtin.apt:
+    name: "{{ legacy_cleanup_packages }}"
+    state: absent
+    purge: true
+    autoremove: true
+  when:
+    - legacy_cleanup_enabled | bool
+    - legacy_cleanup_packages | length > 0
+
+- name: Remove legacy local users while keeping home data on disk
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+    remove: false
+  loop: "{{ legacy_cleanup_users }}"
+  when: legacy_cleanup_enabled | bool

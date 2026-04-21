@@ -1,0 +1,12 @@
+services:
+  {{ n8n_service_name }}:
+    image: {{ n8n_image | quote }}
+    container_name: {{ n8n_container_name | quote }}
+    user: {{ n8n_container_user | quote }}
+    restart: unless-stopped
+    env_file:
+      - {{ n8n_env_file | quote }}
+    ports:
+      - "{{ n8n_published_port }}:5678"
+    volumes:
+      - {{ n8n_data_dir | quote }}:/home/node/.n8n

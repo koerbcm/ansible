@@ -1,0 +1,143 @@
+---
+- name: Validate PostgreSQL container configuration
+  ansible.builtin.assert:
+    that:
+      - postgresql_project_dir | length > 0
+      - postgresql_compose_file | length > 0
+      - postgresql_image | length > 0
+      - postgresql_container_name | length > 0
+      - postgresql_service_name | length > 0
+      - postgresql_user | length > 0
+      - postgresql_password | length > 0
+      - postgresql_data_dir | length > 0
+      - postgresql_published_port | int > 0
+      - postgresql_pgdata | length > 0
+    fail_msg: "PostgreSQL requires project settings, credentials, data dir, port, and PGDATA."
+    success_msg: "PostgreSQL container configuration is valid."
+  when: postgresql_enabled | bool
+
+- name: Ensure PostgreSQL project directory exists
+  ansible.builtin.file:
+    path: "{{ postgresql_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: postgresql_enabled | bool
+
+- name: Validate PostgreSQL managed host paths
+  ansible.builtin.assert:
+    that:
+      - item.path | length > 0
+      - item.owner is defined
+      - item.group is defined
+    fail_msg: "Each PostgreSQL managed host path needs path, owner, and group."
+  loop: "{{ postgresql_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: postgresql_enabled | bool
+
+- name: Ensure PostgreSQL managed host paths exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop: "{{ postgresql_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: postgresql_enabled | bool
+
+- name: Ensure PostgreSQL managed host path ownership is recursive
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    recurse: true
+  loop: "{{ postgresql_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - postgresql_enabled | bool
+    - item.recurse_owner_group | default(false)
+
+- name: Ensure PostgreSQL data directory exists
+  ansible.builtin.file:
+    path: "{{ postgresql_data_dir }}"
+    state: directory
+  when: postgresql_enabled | bool
+
+- name: Render PostgreSQL compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/postgresql.compose.yml.j2"
+    dest: "{{ postgresql_project_dir }}/{{ postgresql_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: postgresql_enabled | bool
+
+- name: Inspect existing PostgreSQL container
+  community.docker.docker_container_info:
+    name: "{{ postgresql_container_name }}"
+  register: postgresql_existing_container
+  when: postgresql_enabled | bool
+
+- name: Determine whether PostgreSQL needs one-time compose adoption
+  ansible.builtin.set_fact:
+    postgresql_needs_adoption: >-
+      {{
+        (postgresql_existing_container.exists | default(false))
+        and
+        (
+          ((postgresql_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != postgresql_project_name
+        )
+      }}
+  when: postgresql_enabled | bool
+
+- name: Note PostgreSQL one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone PostgreSQL container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - postgresql_enabled | bool
+    - ansible_check_mode
+    - postgresql_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone PostgreSQL container
+  community.docker.docker_container:
+    name: "{{ postgresql_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - postgresql_enabled | bool
+    - not ansible_check_mode
+    - postgresql_needs_adoption | default(false)
+
+- name: Deploy PostgreSQL with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ postgresql_project_name }}"
+    project_src: "{{ postgresql_project_dir }}"
+    files:
+      - "{{ postgresql_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: postgresql_compose_result
+  when:
+    - postgresql_enabled | bool
+    - not ansible_check_mode
+
+- name: Show PostgreSQL compose actions
+  ansible.builtin.debug:
+    var: postgresql_compose_result.actions
+  when:
+    - postgresql_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip PostgreSQL compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping PostgreSQL docker compose deployment."
+  when:
+    - postgresql_enabled | bool
+    - ansible_check_mode

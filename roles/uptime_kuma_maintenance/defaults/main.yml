@@ -1,0 +1,24 @@
+---
+uptime_kuma_maintenance_enabled: false
+uptime_kuma_maintenance_state: start
+uptime_kuma_maintenance_mode: command
+uptime_kuma_maintenance_delegate_host: localhost
+uptime_kuma_maintenance_no_log: true
+uptime_kuma_maintenance_timeout: 120
+uptime_kuma_maintenance_environment: {}
+uptime_kuma_maintenance_start_command: []
+uptime_kuma_maintenance_end_command: []
+uptime_kuma_socket_python: python3
+uptime_kuma_socket_script_path: "{{ playbook_dir | dirname }}/scripts/uptime_kuma_socket_automation.py"
+uptime_kuma_server_url: ""
+uptime_kuma_username: ""
+uptime_kuma_password: ""
+uptime_kuma_api_base_url: ""
+uptime_kuma_api_auth_path: /login/access-token
+uptime_kuma_api_username: ""
+uptime_kuma_api_password: ""
+uptime_kuma_api_access_token: ""
+uptime_kuma_api_maintenance_id: ""
+uptime_kuma_api_resume_path_template: /maintenance/{maintenance_id}/resume
+uptime_kuma_api_pause_path_template: /maintenance/{maintenance_id}/pause
+uptime_kuma_api_validate_certs: true

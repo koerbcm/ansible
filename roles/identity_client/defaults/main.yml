@@ -1,0 +1,36 @@
+---
+identity_client_enabled: false
+
+identity_client_packages:
+  - sssd
+  - sssd-tools
+  - libnss-sss
+  - libpam-sss
+  - libsss-sudo
+  - ldap-utils
+
+identity_client_nsswitch_map:
+  passwd: files sss
+  group: files sss
+  shadow: files sss
+  services: db files sss
+  netgroup: nis sss
+  sudoers: files sss
+
+identity_client_domain_name: ""
+identity_client_sssd_services:
+  - nss
+  - pam
+identity_client_sssd_domains: []
+identity_client_ldap_default_authtok: ""
+identity_client_validation_user: ""
+
+# This role uses explicit SSSD responders via `services = nss,pam`.
+# On newer Debian-family hosts the package may also enable socket-activated
+# responders. Those sockets are redundant here and can show as failed after
+# reboot because SSSD already owns the responder sockets.
+identity_client_manage_responder_sockets: true
+identity_client_responder_socket_units:
+  - sssd-nss.socket
+  - sssd-pam.socket
+  - sssd-pam-priv.socket

@@ -1,0 +1,16 @@
+---
+storage_audit_enabled: true
+storage_audit_mount_path: /mnt/backups
+storage_audit_latest_count: 5
+storage_audit_include_docker: true
+storage_audit_include_service_backlog: true
+
+storage_audit_known_backup_roots:
+  - /mnt/backups/graylog/mongo
+  - /mnt/backups/graylog/config
+  - /mnt/backups/graylog/opensearch-snapshots
+  - /mnt/backups/mysql
+  - /mnt/backups/postgresql
+  - /mnt/backups/n8n
+  - /mnt/backups/plex
+  - /mnt/backups/pi1/app-config

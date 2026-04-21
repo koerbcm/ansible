@@ -1,0 +1,174 @@
+---
+- name: Configure apt to force IPv4
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/99force-ipv4
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Acquire::ForceIPv4 "true";
+  when:
+    - ansible_os_family == "Debian"
+    - base_apt_force_ipv4 | bool
+
+- name: Remove apt IPv4 override when disabled
+  ansible.builtin.file:
+    path: /etc/apt/apt.conf.d/99force-ipv4
+    state: absent
+  when:
+    - ansible_os_family == "Debian"
+    - not (base_apt_force_ipv4 | bool)
+
+- name: Check classic apt sources file
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list
+  register: base_apt_sources_list
+  when:
+    - ansible_distribution == "Ubuntu"
+    - base_apt_normalize_ubuntu_archive_mirror | bool
+
+- name: Find active apt source snippets
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns:
+      - "*.list"
+      - "*.sources"
+    file_type: file
+  register: base_apt_sources_snippets
+  when:
+    - ansible_distribution == "Ubuntu"
+    - base_apt_normalize_ubuntu_archive_mirror | bool
+
+- name: Build apt source file list
+  ansible.builtin.set_fact:
+    base_apt_source_files: >-
+      {{
+        ([{'path': '/etc/apt/sources.list'}] if base_apt_sources_list.stat.exists | default(false) else [])
+        + (base_apt_sources_snippets.files | default([]))
+      }}
+  when:
+    - ansible_distribution == "Ubuntu"
+    - base_apt_normalize_ubuntu_archive_mirror | bool
+
+- name: Normalize Ubuntu apt archive mirror aliases
+  ansible.builtin.replace:
+    path: "{{ item.0.path }}"
+    regexp: "{{ item.1 | regex_escape }}"
+    replace: "{{ base_apt_ubuntu_archive_mirror }}"
+  loop: "{{ (base_apt_source_files | default([])) | product(base_apt_ubuntu_archive_mirror_aliases) | list }}"
+  loop_control:
+    label: "{{ item.0.path }}: {{ item.1 }}"
+  when:
+    - ansible_distribution == "Ubuntu"
+    - base_apt_normalize_ubuntu_archive_mirror | bool
+    - base_apt_ubuntu_archive_mirror_aliases | length > 0
+
+- name: Install baseline packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ base_apt_cache_valid_time }}"
+    lock_timeout: "{{ base_apt_lock_timeout }}"
+  when:
+    - ansible_os_family == "Debian"
+    - base_packages | length > 0
+
+- name: Ensure tzdata is installed
+  ansible.builtin.apt:
+    name: tzdata
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ base_apt_cache_valid_time }}"
+    lock_timeout: "{{ base_apt_lock_timeout }}"
+  when:
+    - ansible_os_family == "Debian"
+    - timezone | length > 0
+
+- name: Configure system timezone name
+  ansible.builtin.copy:
+    dest: /etc/timezone
+    owner: root
+    group: root
+    mode: "0644"
+    content: "{{ timezone }}\n"
+  when: timezone | length > 0
+
+- name: Configure system timezone link
+  ansible.builtin.file:
+    src: "/usr/share/zoneinfo/{{ timezone }}"
+    dest: /etc/localtime
+    state: link
+    force: true
+    owner: root
+    group: root
+  when: timezone | length > 0
+
+- name: Validate required break-glass accounts have local password hashes
+  ansible.builtin.assert:
+    that:
+      - item in ((base_users + base_extra_users) | map(attribute='name') | list)
+      - item in base_user_password_hashes
+    fail_msg: >-
+      Break-glass user {{ item }} must be managed locally and have a password hash
+      in base_user_password_hashes when base_require_break_glass_passwords is enabled.
+    success_msg: "Break-glass password hash is defined for {{ item }}."
+  loop: "{{ base_break_glass_users }}"
+  when: base_require_break_glass_passwords | bool
+
+- name: Ensure requested local groups exist
+  ansible.builtin.group:
+    name: "{{ item.name if item is mapping else item }}"
+    gid: "{{ item.gid if item is mapping and 'gid' in item else omit }}"
+    state: present
+  loop: "{{ base_groups }}"
+
+- name: Ensure baseline users exist
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    state: "{{ item.state | default('present') }}"
+    create_home: "{{ item.create_home | default(true) }}"
+    password: >-
+      {{
+        item.password
+        if 'password' in item
+        else (
+          base_user_password_hashes[item.name]
+          if item.name in base_user_password_hashes
+          else omit
+        )
+      }}
+    uid: "{{ item.uid | default(omit) }}"
+    group: "{{ item.group | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+    home: "{{ item.home | default(omit) }}"
+    groups: "{{ item.groups | default([]) | join(',') if (item.groups | default([]) | length > 0) else omit }}"
+    append: "{{ (item.groups | default([]) | length > 0) | bool }}"
+  loop: "{{ base_users + base_extra_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Install authorized SSH keys for baseline users
+  ansible.posix.authorized_key:
+    user: "{{ item.0.name }}"
+    key: "{{ item.1 }}"
+    state: present
+    manage_dir: true
+  loop: "{{ (base_users + base_extra_users) | subelements('authorized_keys', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+
+- name: Manage sudoers drop-ins for privileged users
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "/usr/sbin/visudo -cf %s"
+    content: |
+      {{ item.name }} ALL=(ALL) {{ 'NOPASSWD:' if item.sudo_nopasswd | default(false) else '' }}ALL
+  loop: "{{ base_users + base_extra_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.sudo | default(false)

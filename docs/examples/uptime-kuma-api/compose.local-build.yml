@@ -1,0 +1,20 @@
+services:
+  kuma_api:
+    container_name: backend
+    image: local/uptimekuma_restapi:develop
+    build:
+      # Clone MedAziz11/Uptime-Kuma-Web-API on the NAS and set this path to that checkout.
+      context: /volume1/dockerProjects/Uptime-Kuma-Web-API
+      dockerfile: Dockerfile
+    volumes:
+      - /volume1/dockerVolumes/nas/uptimeKumaApi_data:/db
+    restart: always
+    environment:
+      KUMA_SERVER: http://kuma.kirby.lan
+      KUMA_USERNAME: koerbcm
+      KUMA_PASSWORD: "${KUMA_PASSWORD}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+      SECRET_KEY: "${KUMA_API_SECRET_KEY}"
+      ACCESS_TOKEN_EXPIRATION: "1440"
+    ports:
+      - "9001:8000"

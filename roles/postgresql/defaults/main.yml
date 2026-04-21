@@ -1,0 +1,19 @@
+---
+postgresql_enabled: false
+postgresql_project_name: postgresql
+postgresql_project_dir: "{{ homelab_stack_root }}/postgresql"
+postgresql_compose_file: compose.yml
+postgresql_image: postgres:18
+postgresql_container_name: postgresql
+postgresql_service_name: postgresql
+postgresql_hostname: postgres16
+postgresql_user: ""
+postgresql_password: ""
+postgresql_published_port: 5432
+postgresql_data_dir: ""
+postgresql_local_data_dir: /srv/postgresql/data
+postgresql_pgdata: /var/lib/postgresql/data
+postgresql_watchtower_monitor_only: false
+postgresql_stop_grace_period: 120s
+
+postgresql_managed_host_paths: []

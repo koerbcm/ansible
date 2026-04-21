@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+unit_name="${1:-unknown-unit}"
+host_name="$(hostname -f 2>/dev/null || hostname)"
+
+env_file="{{ homelab_failure_notify_environment_file }}"
+if [[ -f "${env_file}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${env_file}"
+  set +a
+fi
+
+alert_tag="${HOMELAB_ALERT_TAG:-homelab-alert}"
+alert_priority="${HOMELAB_ALERT_PRIORITY:-alert}"
+
+alert_line="HOMELAB_ALERT unit_failed host=${host_name} unit=${unit_name}"
+logger -t "${alert_tag}" -p "daemon.${alert_priority}" -- "${alert_line}"
+
+if [[ -z "${HOMELAB_NTFY_URL:-}" ]]; then
+  exit 0
+fi
+
+curl_args=(
+  --fail
+  --show-error
+  --silent
+  --max-time "${HOMELAB_NTFY_TIMEOUT:-10}"
+  -H "Title: Homelab unit failed on ${host_name}"
+  -H "Priority: ${HOMELAB_NTFY_PRIORITY:-high}"
+  -H "Tags: ${HOMELAB_NTFY_TAGS:-warning}"
+)
+
+if [[ -n "${HOMELAB_NTFY_TOKEN:-}" ]]; then
+  curl_args+=(-H "Authorization: Bearer ${HOMELAB_NTFY_TOKEN}")
+fi
+
+message="${unit_name} failed on ${host_name}.
+
+Check:
+journalctl -u ${unit_name} -n 100 --no-pager"
+
+curl_status=0
+curl_output="$(curl "${curl_args[@]}" --data-binary "${message}" "${HOMELAB_NTFY_URL}" 2>&1)" || curl_status=$?
+
+if [[ "${curl_status}" -ne 0 ]]; then
+  logger -t "${alert_tag}" -p daemon.warning -- "HOMELAB_ALERT ntfy_notify_failed host=${host_name} unit=${unit_name} curl_exit=${curl_status} error=${curl_output}"
+fi

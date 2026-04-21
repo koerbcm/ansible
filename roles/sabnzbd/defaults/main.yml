@@ -1,0 +1,15 @@
+---
+sabnzbd_enabled: false
+sabnzbd_project_name: sabnzbd
+sabnzbd_project_dir: "{{ homelab_stack_root }}/sabnzbd"
+sabnzbd_compose_file: compose.yml
+sabnzbd_image: lscr.io/linuxserver/sabnzbd:latest
+sabnzbd_container_name: sabnzbd
+sabnzbd_service_name: sabnzbd
+sabnzbd_config_dir: ""
+sabnzbd_downloads_dir: /mnt/plexStaging
+sabnzbd_published_port: 38080
+sabnzbd_puid: 1000
+sabnzbd_pgid: 1000
+sabnzbd_permission_fix_enabled: false
+sabnzbd_permission_fix_user: ""

@@ -1,0 +1,15 @@
+---
+homelab_failure_notify_enabled: true
+homelab_failure_notify_scripts_dir: /usr/local/bin
+homelab_failure_notify_environment_file: /etc/default/homelab-unit-failure-notify
+homelab_failure_notify_unit_name: homelab-unit-failure@
+
+homelab_failure_notify_logger_tag: homelab-alert
+homelab_failure_notify_logger_priority: alert
+
+# Optional ntfy delivery. Keep blank to log only.
+homelab_failure_notify_ntfy_url: ""
+homelab_failure_notify_ntfy_token: ""
+homelab_failure_notify_ntfy_timeout: 10
+homelab_failure_notify_ntfy_priority: high
+homelab_failure_notify_ntfy_tags: warning

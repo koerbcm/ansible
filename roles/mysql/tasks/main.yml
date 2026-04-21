@@ -1,0 +1,167 @@
+---
+- name: Validate MySQL configuration
+  ansible.builtin.assert:
+    that:
+      - mysql_project_name | length > 0
+      - mysql_project_dir | length > 0
+      - mysql_compose_file | length > 0
+      - mysql_env_file | length > 0
+      - mysql_image | length > 0
+      - mysql_container_name | length > 0
+      - mysql_service_name | length > 0
+      - mysql_hostname | length > 0
+      - mysql_data_dir | length > 0
+      - mysql_published_port | int > 0
+      - mysql_root_password | length > 0
+      - mysql_database | length > 0
+      - mysql_app_user | length > 0
+      - mysql_app_password | length > 0
+    fail_msg: "MySQL requires project settings, image, container naming, data dir, and port."
+    success_msg: "MySQL configuration is valid."
+  when: mysql_enabled | bool
+
+- name: Ensure MySQL project directory exists
+  ansible.builtin.file:
+    path: "{{ mysql_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: mysql_enabled | bool
+
+- name: Validate MySQL managed host paths
+  ansible.builtin.assert:
+    that:
+      - mysql_host_path.path | length > 0
+      - mysql_host_path.owner is defined
+      - mysql_host_path.group is defined
+    fail_msg: "Each MySQL managed host path needs path, owner, and group."
+  loop: "{{ mysql_managed_host_paths }}"
+  loop_control:
+    loop_var: mysql_host_path
+    label: "{{ mysql_host_path.path }}"
+  when: mysql_enabled | bool
+
+- name: Ensure MySQL managed host paths exist
+  ansible.builtin.file:
+    path: "{{ mysql_host_path.path }}"
+    state: directory
+    owner: "{{ mysql_host_path.owner }}"
+    group: "{{ mysql_host_path.group }}"
+    mode: "{{ mysql_host_path.mode | default('0755') }}"
+  loop: "{{ mysql_managed_host_paths }}"
+  loop_control:
+    loop_var: mysql_host_path
+    label: "{{ mysql_host_path.path }}"
+  when: mysql_enabled | bool
+
+- name: Ensure MySQL managed host path ownership is recursive
+  ansible.builtin.file:
+    path: "{{ mysql_host_path.path }}"
+    state: directory
+    owner: "{{ mysql_host_path.owner }}"
+    group: "{{ mysql_host_path.group }}"
+    recurse: true
+  loop: "{{ mysql_managed_host_paths }}"
+  loop_control:
+    loop_var: mysql_host_path
+    label: "{{ mysql_host_path.path }}"
+  when:
+    - mysql_enabled | bool
+    - mysql_host_path.recurse_owner_group | default(false)
+
+- name: Render MySQL compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/mysql.compose.yml.j2"
+    dest: "{{ mysql_project_dir }}/{{ mysql_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: mysql_enabled | bool
+
+- name: Render MySQL environment file
+  ansible.builtin.template:
+    src: mysql.env.j2
+    dest: "{{ mysql_project_dir }}/{{ mysql_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: mysql_enabled | bool
+
+- name: Inspect existing MySQL container
+  community.docker.docker_container_info:
+    name: "{{ mysql_container_name }}"
+  register: mysql_existing_container
+  when: mysql_enabled | bool
+
+- name: Determine whether MySQL needs one-time compose adoption
+  ansible.builtin.set_fact:
+    mysql_needs_adoption: >-
+      {{
+        (mysql_existing_container.exists | default(false))
+        and
+        (
+          ((mysql_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != mysql_project_name
+          or
+          ((mysql_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != mysql_service_name
+        )
+      }}
+  when: mysql_enabled | bool
+
+- name: Note MySQL one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing MySQL container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - mysql_enabled | bool
+    - ansible_check_mode
+    - mysql_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone MySQL container
+  community.docker.docker_container:
+    name: "{{ mysql_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - mysql_enabled | bool
+    - mysql_manage_runtime | bool
+    - not ansible_check_mode
+    - mysql_needs_adoption | default(false)
+
+- name: Deploy MySQL with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ mysql_project_name }}"
+    project_src: "{{ mysql_project_dir }}"
+    files:
+      - "{{ mysql_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: mysql_compose_result
+  when:
+    - mysql_enabled | bool
+    - mysql_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Show MySQL compose actions
+  ansible.builtin.debug:
+    var: mysql_compose_result.actions
+  when:
+    - mysql_enabled | bool
+    - mysql_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Note MySQL render-only mode
+  ansible.builtin.debug:
+    msg: "MySQL compose and env were rendered, but runtime management is disabled."
+  when:
+    - mysql_enabled | bool
+    - not (mysql_manage_runtime | bool)
+
+- name: Skip MySQL compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping MySQL docker compose deployment."
+  when:
+    - mysql_enabled | bool
+    - mysql_manage_runtime | bool
+    - ansible_check_mode

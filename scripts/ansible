@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+venv_ansible="${repo_root}/.venv/bin/ansible"
+
+if [[ -x "${venv_ansible}" ]]; then
+  exec "${venv_ansible}" "$@"
+fi
+
+echo "Warning: ${venv_ansible} not found, falling back to system ansible." >&2
+exec ansible "$@"

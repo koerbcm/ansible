@@ -1,0 +1,76 @@
+---
+- name: Validate app config backup configuration
+  ansible.builtin.assert:
+    that:
+      - app_config_backup_scripts_dir | length > 0
+      - app_config_backup_root | length > 0
+      - app_config_backup_on_calendar | length > 0
+      - app_config_backup_items | length > 0
+    fail_msg: "App config backup requires script path, backup root, schedule, and at least one item."
+    success_msg: "App config backup configuration is valid."
+  when: app_config_backup_enabled | bool
+
+- name: Validate app config backup items
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name | length > 0
+      - item.source is defined
+      - item.source | length > 0
+    fail_msg: "Each app config backup item must define name and source."
+    success_msg: "App config backup item {{ item.name }} is valid."
+  loop: "{{ app_config_backup_items }}"
+  loop_control:
+    label: "{{ item.name | default(item.source | default('unknown')) }}"
+  when: app_config_backup_enabled | bool
+
+- name: Ensure app config backup directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ app_config_backup_scripts_dir }}"
+    - "{{ app_config_backup_root }}"
+  when: app_config_backup_enabled | bool
+
+- name: Install app config backup script
+  ansible.builtin.template:
+    src: app-config-backup.sh.j2
+    dest: "{{ app_config_backup_scripts_dir }}/app-config-backup.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: app_config_backup_enabled | bool
+
+- name: Install app config backup service unit
+  ansible.builtin.template:
+    src: app-config-backup.service.j2
+    dest: /etc/systemd/system/app-config-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: app_config_backup_enabled | bool
+
+- name: Install app config backup timer unit
+  ansible.builtin.template:
+    src: app-config-backup.timer.j2
+    dest: /etc/systemd/system/app-config-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: app_config_backup_enabled | bool
+
+- name: Reload systemd for app config backup units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: app_config_backup_enabled | bool
+
+- name: Ensure app config backup timer is enabled and started
+  ansible.builtin.systemd:
+    name: app-config-backup.timer
+    enabled: true
+    state: started
+  when: app_config_backup_enabled | bool

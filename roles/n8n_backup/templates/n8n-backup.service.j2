@@ -1,0 +1,9 @@
+[Unit]
+Description=n8n local data backup
+{% if homelab_failure_notify_enabled | default(false) | bool %}
+OnFailure={{ homelab_failure_notify_unit_name | default('homelab-unit-failure@') }}%n.service
+{% endif %}
+
+[Service]
+Type=oneshot
+ExecStart={{ n8n_backup_scripts_dir }}/n8n-backup.sh

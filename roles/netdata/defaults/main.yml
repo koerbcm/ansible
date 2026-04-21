@@ -1,0 +1,15 @@
+---
+netdata_enabled: false
+netdata_project_name: netdata
+netdata_project_dir: "{{ homelab_stack_root }}/netdata"
+netdata_compose_file: compose.yml
+netdata_image: netdata/netdata:stable
+netdata_container_name: netdata
+netdata_service_name: netdata
+netdata_listener_port: 19999
+netdata_claim_url: https://app.netdata.cloud
+netdata_claim_rooms: ""
+netdata_claim_token: ""
+netdata_config_volume_name: netdata_netdataconfig
+netdata_cache_volume_name: netdata_netdatacache
+netdata_lib_volume_name: netdata_netdatalib

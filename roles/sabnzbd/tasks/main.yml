@@ -1,0 +1,122 @@
+---
+- name: Validate SABnzbd configuration
+  ansible.builtin.assert:
+    that:
+      - sabnzbd_project_dir | length > 0
+      - sabnzbd_compose_file | length > 0
+      - sabnzbd_image | length > 0
+      - sabnzbd_container_name | length > 0
+      - sabnzbd_service_name | length > 0
+      - sabnzbd_config_dir | length > 0
+      - sabnzbd_downloads_dir | length > 0
+      - sabnzbd_published_port | int > 0
+      - not sabnzbd_permission_fix_enabled | bool or sabnzbd_permission_fix_user | length > 0
+    fail_msg: "SABnzbd requires project settings, data dirs, and a published port."
+    success_msg: "SABnzbd configuration is valid."
+  when: sabnzbd_enabled | bool
+
+- name: Ensure SABnzbd project directory exists
+  ansible.builtin.file:
+    path: "{{ sabnzbd_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: sabnzbd_enabled | bool
+
+- name: Ensure SABnzbd data directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ sabnzbd_config_dir }}"
+    - "{{ sabnzbd_downloads_dir }}"
+  when: sabnzbd_enabled | bool
+
+- name: Ensure SABnzbd config tree is writable by the container owner
+  ansible.builtin.file:
+    path: "{{ sabnzbd_config_dir }}"
+    state: directory
+    mode: u=rwX,g=rX,o=rX
+    recurse: true
+  become: true
+  become_user: "{{ sabnzbd_permission_fix_user }}"
+  when:
+    - sabnzbd_enabled | bool
+    - sabnzbd_permission_fix_enabled | bool
+
+- name: Render SABnzbd compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/sabnzbd.compose.yml.j2"
+    dest: "{{ sabnzbd_project_dir }}/{{ sabnzbd_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: sabnzbd_enabled | bool
+
+- name: Inspect existing SABnzbd container
+  community.docker.docker_container_info:
+    name: "{{ sabnzbd_container_name }}"
+  register: sabnzbd_existing_container
+  when: sabnzbd_enabled | bool
+
+- name: Determine whether SABnzbd needs one-time compose adoption
+  ansible.builtin.set_fact:
+    sabnzbd_needs_adoption: >-
+      {{
+        (sabnzbd_existing_container.exists | default(false))
+        and
+        (
+          ((sabnzbd_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != sabnzbd_project_name
+          or
+          ((sabnzbd_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != sabnzbd_service_name
+        )
+      }}
+  when: sabnzbd_enabled | bool
+
+- name: Note SABnzbd one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone SABnzbd container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - sabnzbd_enabled | bool
+    - ansible_check_mode
+    - sabnzbd_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone SABnzbd container
+  community.docker.docker_container:
+    name: "{{ sabnzbd_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - sabnzbd_enabled | bool
+    - not ansible_check_mode
+    - sabnzbd_needs_adoption | default(false)
+
+- name: Deploy SABnzbd with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ sabnzbd_project_name }}"
+    project_src: "{{ sabnzbd_project_dir }}"
+    files:
+      - "{{ sabnzbd_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: sabnzbd_compose_result
+  when:
+    - sabnzbd_enabled | bool
+    - not ansible_check_mode
+
+- name: Show SABnzbd compose actions
+  ansible.builtin.debug:
+    var: sabnzbd_compose_result.actions
+  when:
+    - sabnzbd_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip SABnzbd compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping SABnzbd docker compose deployment."
+  when:
+    - sabnzbd_enabled | bool
+    - ansible_check_mode

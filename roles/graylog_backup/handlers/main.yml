@@ -1,0 +1,10 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: Skip systemd reload in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping systemd daemon reload."
+  when: ansible_check_mode

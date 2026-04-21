@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="{{ mysql_backup_root }}"
+MYSQL_CONTAINER="{{ mysql_backup_container_name }}"
+DEST_DIR="${BACKUP_ROOT}/$(date +%F-%H%M%S)"
+
+mkdir -p "${DEST_DIR}"
+
+docker exec "${MYSQL_CONTAINER}" sh -lc \
+  'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --all-databases --single-transaction --routines --events --triggers --hex-blob' \
+  | gzip > "${DEST_DIR}/mysql-all-databases.sql.gz"
+
+find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ mysql_backup_retention_days }} -exec rm -rf {} +

@@ -1,0 +1,81 @@
+---
+- name: Ensure rsyslog configuration directory exists
+  ansible.builtin.file:
+    path: /etc/rsyslog.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: log_forwarder_enabled | bool
+
+- name: Ensure AppArmor local override directory exists for rsyslog
+  ansible.builtin.file:
+    path: /etc/apparmor.d/local
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - log_forwarder_enabled | bool
+    - log_forwarder_apparmor_allow_paths | length > 0
+
+- name: Configure rsyslog AppArmor override for file log inputs
+  ansible.builtin.template:
+    src: usr.sbin.rsyslogd.local.j2
+    dest: /etc/apparmor.d/local/usr.sbin.rsyslogd
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - log_forwarder_enabled | bool
+    - log_forwarder_apparmor_allow_paths | length > 0
+  notify:
+    - Reload rsyslog AppArmor profile
+    - Restart rsyslog
+
+- name: Remove rsyslog AppArmor override when none are configured
+  ansible.builtin.file:
+    path: /etc/apparmor.d/local/usr.sbin.rsyslogd
+    state: absent
+  when:
+    - not log_forwarder_enabled | bool or log_forwarder_apparmor_allow_paths | length == 0
+  notify:
+    - Reload rsyslog AppArmor profile
+    - Restart rsyslog
+
+- name: Configure remote rsyslog forwarding
+  ansible.builtin.template:
+    src: 99-log-forwarder.conf.j2
+    dest: /etc/rsyslog.d/99-log-forwarder.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: log_forwarder_enabled | bool
+  notify: Restart rsyslog
+
+- name: Configure rsyslog file log inputs
+  ansible.builtin.template:
+    src: 30-log-forwarder-imfile.conf.j2
+    dest: /etc/rsyslog.d/30-log-forwarder-imfile.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - log_forwarder_enabled | bool
+    - log_forwarder_file_inputs | length > 0
+  notify: Restart rsyslog
+
+- name: Remove rsyslog file log inputs when none are configured
+  ansible.builtin.file:
+    path: /etc/rsyslog.d/30-log-forwarder-imfile.conf
+    state: absent
+  when:
+    - not log_forwarder_enabled | bool or log_forwarder_file_inputs | length == 0
+  notify: Restart rsyslog
+
+- name: Remove remote rsyslog forwarding when disabled
+  ansible.builtin.file:
+    path: /etc/rsyslog.d/99-log-forwarder.conf
+    state: absent
+  when: not log_forwarder_enabled | bool
+  notify: Restart rsyslog

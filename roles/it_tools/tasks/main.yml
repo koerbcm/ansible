@@ -1,0 +1,98 @@
+---
+- name: Validate IT-Tools configuration
+  ansible.builtin.assert:
+    that:
+      - it_tools_project_dir | length > 0
+      - it_tools_compose_file | length > 0
+      - it_tools_image | length > 0
+      - it_tools_container_name | length > 0
+      - it_tools_service_name | length > 0
+      - it_tools_published_port | int > 0
+    fail_msg: "IT-Tools requires project settings and a published port."
+    success_msg: "IT-Tools configuration is valid."
+  when: it_tools_enabled | bool
+
+- name: Ensure IT-Tools project directory exists
+  ansible.builtin.file:
+    path: "{{ it_tools_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: it_tools_enabled | bool
+
+- name: Render IT-Tools compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/it-tools.compose.yml.j2"
+    dest: "{{ it_tools_project_dir }}/{{ it_tools_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: it_tools_enabled | bool
+
+- name: Inspect existing IT-Tools container
+  community.docker.docker_container_info:
+    name: "{{ it_tools_container_name }}"
+  register: it_tools_existing_container
+  when: it_tools_enabled | bool
+
+- name: Determine whether IT-Tools needs one-time compose adoption
+  ansible.builtin.set_fact:
+    it_tools_needs_adoption: >-
+      {{
+        (it_tools_existing_container.exists | default(false))
+        and
+        (
+          ((it_tools_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != it_tools_project_name
+          or
+          ((it_tools_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != it_tools_service_name
+        )
+      }}
+  when: it_tools_enabled | bool
+
+- name: Note IT-Tools one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone IT-Tools container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - it_tools_enabled | bool
+    - ansible_check_mode
+    - it_tools_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone IT-Tools container
+  community.docker.docker_container:
+    name: "{{ it_tools_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - it_tools_enabled | bool
+    - not ansible_check_mode
+    - it_tools_needs_adoption | default(false)
+
+- name: Deploy IT-Tools with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ it_tools_project_name }}"
+    project_src: "{{ it_tools_project_dir }}"
+    files:
+      - "{{ it_tools_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: it_tools_compose_result
+  when:
+    - it_tools_enabled | bool
+    - not ansible_check_mode
+
+- name: Show IT-Tools compose actions
+  ansible.builtin.debug:
+    var: it_tools_compose_result.actions
+  when:
+    - it_tools_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip IT-Tools compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping IT-Tools docker compose deployment."
+  when:
+    - it_tools_enabled | bool
+    - ansible_check_mode

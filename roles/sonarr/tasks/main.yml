@@ -1,0 +1,111 @@
+---
+- name: Validate Sonarr configuration
+  ansible.builtin.assert:
+    that:
+      - sonarr_project_dir | length > 0
+      - sonarr_compose_file | length > 0
+      - sonarr_image | length > 0
+      - sonarr_container_name | length > 0
+      - sonarr_service_name | length > 0
+      - sonarr_config_dir | length > 0
+      - sonarr_library_dir | length > 0
+      - sonarr_downloads_dir | length > 0
+      - sonarr_published_port | int > 0
+    fail_msg: "Sonarr requires project settings, data dirs, and a published port."
+    success_msg: "Sonarr configuration is valid."
+  when: sonarr_enabled | bool
+
+- name: Ensure Sonarr project directory exists
+  ansible.builtin.file:
+    path: "{{ sonarr_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: sonarr_enabled | bool
+
+- name: Ensure Sonarr data directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ sonarr_config_dir }}"
+    - "{{ sonarr_library_dir }}"
+    - "{{ sonarr_downloads_dir }}"
+  when: sonarr_enabled | bool
+
+- name: Render Sonarr compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/sonarr.compose.yml.j2"
+    dest: "{{ sonarr_project_dir }}/{{ sonarr_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: sonarr_enabled | bool
+
+- name: Inspect existing Sonarr container
+  community.docker.docker_container_info:
+    name: "{{ sonarr_container_name }}"
+  register: sonarr_existing_container
+  when: sonarr_enabled | bool
+
+- name: Determine whether Sonarr needs one-time compose adoption
+  ansible.builtin.set_fact:
+    sonarr_needs_adoption: >-
+      {{
+        (sonarr_existing_container.exists | default(false))
+        and
+        (
+          ((sonarr_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != sonarr_project_name
+          or
+          ((sonarr_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != sonarr_service_name
+        )
+      }}
+  when: sonarr_enabled | bool
+
+- name: Note Sonarr one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Sonarr container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - sonarr_enabled | bool
+    - ansible_check_mode
+    - sonarr_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Sonarr container
+  community.docker.docker_container:
+    name: "{{ sonarr_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - sonarr_enabled | bool
+    - not ansible_check_mode
+    - sonarr_needs_adoption | default(false)
+
+- name: Deploy Sonarr with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ sonarr_project_name }}"
+    project_src: "{{ sonarr_project_dir }}"
+    files:
+      - "{{ sonarr_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: sonarr_compose_result
+  when:
+    - sonarr_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Sonarr compose actions
+  ansible.builtin.debug:
+    var: sonarr_compose_result.actions
+  when:
+    - sonarr_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Sonarr compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Sonarr docker compose deployment."
+  when:
+    - sonarr_enabled | bool
+    - ansible_check_mode

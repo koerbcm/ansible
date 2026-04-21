@@ -1,0 +1,44 @@
+---
+n8n_enabled: false
+n8n_manage_runtime: false
+
+n8n_project_name: n8n
+n8n_project_dir: "{{ homelab_stack_root }}/n8n"
+n8n_compose_file: compose.yml
+n8n_env_file: .env
+
+n8n_image: docker.n8n.io/n8nio/n8n:latest
+n8n_container_name: n8n
+n8n_service_name: n8nio
+n8n_container_user: "1000:1000"
+n8n_published_port: 5678
+
+n8n_data_dir: /srv/n8n/data
+n8n_managed_host_paths:
+  - path: "{{ n8n_data_dir }}"
+    owner: "1000"
+    group: "1000"
+    mode: "0750"
+    recurse_owner_group: true
+
+n8n_db_type: postgresdb
+n8n_db_host: 10.27.70.12
+n8n_db_port: 5432
+n8n_db_database: n8n
+n8n_db_schema: public
+n8n_db_user: n8n_user
+n8n_db_password: "{{ docker2_n8n_db_password }}"
+
+n8n_host: n8n.koerbcm.com
+n8n_protocol: https
+n8n_webhook_url: https://n8n.koerbcm.com/
+n8n_domain_name: koerbcm.com
+n8n_subdomain: n8n
+n8n_timezone: America/Denver
+n8n_smtp_host: outbound.mailhop.org
+n8n_smtp_port: 587
+n8n_smtp_user: koerbcm
+n8n_smtp_pass: "{{ docker2_n8n_smtp_password }}"
+n8n_smtp_sender: n8n@koerbcm.com
+n8n_runners_enabled: true
+n8n_enforce_settings_file_permissions: true

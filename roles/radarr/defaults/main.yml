@@ -1,0 +1,14 @@
+---
+radarr_enabled: false
+radarr_project_name: radarr
+radarr_project_dir: "{{ homelab_stack_root }}/radarr"
+radarr_compose_file: compose.yml
+radarr_image: lscr.io/linuxserver/radarr:latest
+radarr_container_name: radarr
+radarr_service_name: radarr
+radarr_config_dir: ""
+radarr_library_dir: /mnt/plexLibrary
+radarr_downloads_dir: /mnt/plexStaging
+radarr_published_port: 38081
+radarr_puid: 1000
+radarr_pgid: 1000

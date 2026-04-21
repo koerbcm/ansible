@@ -1,0 +1,17 @@
+---
+plex_backup_enabled: false
+
+plex_backup_scripts_dir: /usr/local/bin
+plex_backup_root: /mnt/backups/plex
+plex_backup_source_dir: "/var/lib/docker/volumes/{{ plex_config_volume_name | default('plexConfig_data') }}/_data"
+plex_backup_destination_dir: "{{ plex_backup_root }}/config-current"
+plex_backup_on_calendar: "*-*-* 02:10:00"
+plex_backup_rsync_bwlimit: ""
+plex_backup_excludes:
+  - "Library/Application Support/Plex Media Server/Cache/"
+  - "Library/Application Support/Plex Media Server/Codecs/"
+  - "Library/Application Support/Plex Media Server/Crash Reports/"
+  - "Library/Application Support/Plex Media Server/Diagnostics/"
+  - "Library/Application Support/Plex Media Server/Logs/"
+  - "Library/Application Support/Plex Media Server/Media/"
+  - "Library/Application Support/Plex Media Server/Updates/"

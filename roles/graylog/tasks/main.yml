@@ -1,0 +1,158 @@
+---
+- name: Validate Graylog configuration
+  ansible.builtin.assert:
+    that:
+      - graylog_project_name | length > 0
+      - graylog_project_dir | length > 0
+      - graylog_compose_file | length > 0
+      - graylog_env_file | length > 0
+      - graylog_mongodb_image | length > 0
+      - graylog_datanode_image | length > 0
+      - graylog_image | length > 0
+      - graylog_root_username | length > 0
+      - graylog_password_secret | length > 0
+      - graylog_root_password_sha2 | length > 0
+      - graylog_transport_email_auth_username | length > 0
+      - graylog_transport_email_auth_password | length > 0
+      - graylog_http_external_uri | length > 0
+      - graylog_timezone | length > 0
+      - graylog_datanode_override_config_dir | length > 0
+      - graylog_datanode_override_config_file | length > 0
+      - graylog_datanode_override_config_container_path | length > 0
+      - graylog_datanode_path_repo | length > 0
+      - graylog_local_mongodb_data_dir | length > 0
+      - graylog_local_mongodb_config_dir | length > 0
+      - graylog_local_datanode_dir | length > 0
+      - graylog_local_graylog_data_dir | length > 0
+      - graylog_backup_snapshot_root | length > 0
+      - graylog_watchtower_hooks_dir | length > 0
+    fail_msg: "Graylog requires project settings, local storage paths, and secret values."
+    success_msg: "Graylog configuration is valid."
+  when: graylog_enabled | bool
+
+- name: Ensure Graylog project directory exists
+  ansible.builtin.file:
+    path: "{{ graylog_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: graylog_enabled | bool
+
+- name: Validate Graylog managed host paths
+  ansible.builtin.assert:
+    that:
+      - graylog_host_path.path | length > 0
+      - graylog_host_path.owner is defined
+      - graylog_host_path.group is defined
+    fail_msg: "Each Graylog managed host path needs path, owner, and group."
+  loop: "{{ graylog_managed_host_paths }}"
+  loop_control:
+    loop_var: graylog_host_path
+    label: "{{ graylog_host_path.path }}"
+  when: graylog_enabled | bool
+
+- name: Ensure Graylog managed host paths exist
+  ansible.builtin.file:
+    path: "{{ graylog_host_path.path }}"
+    state: directory
+    owner: "{{ graylog_host_path.owner }}"
+    group: "{{ graylog_host_path.group }}"
+    mode: "{{ graylog_host_path.mode | default('0755') }}"
+  loop: "{{ graylog_managed_host_paths }}"
+  loop_control:
+    loop_var: graylog_host_path
+    label: "{{ graylog_host_path.path }}"
+  when: graylog_enabled | bool
+
+- name: Ensure Graylog managed host path ownership is recursive
+  ansible.builtin.file:
+    path: "{{ graylog_host_path.path }}"
+    state: directory
+    owner: "{{ graylog_host_path.owner }}"
+    group: "{{ graylog_host_path.group }}"
+    recurse: true
+  loop: "{{ graylog_managed_host_paths }}"
+  loop_control:
+    loop_var: graylog_host_path
+    label: "{{ graylog_host_path.path }}"
+  when:
+    - graylog_enabled | bool
+    - graylog_host_path.recurse_owner_group | default(false)
+
+- name: Ensure Graylog datanode override directory exists
+  ansible.builtin.file:
+    path: "{{ graylog_datanode_override_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - graylog_enabled | bool
+    - graylog_datanode_override_config_enabled | bool
+
+- name: Render Graylog datanode override config
+  ansible.builtin.template:
+    src: graylog-datanode-overrideconfig.conf.j2
+    dest: "{{ graylog_datanode_override_config_dir }}/{{ graylog_datanode_override_config_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - graylog_enabled | bool
+    - graylog_datanode_override_config_enabled | bool
+
+- name: Render Graylog compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/graylog.compose.yml.j2"
+    dest: "{{ graylog_project_dir }}/{{ graylog_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: graylog_enabled | bool
+
+- name: Render Graylog environment file
+  ansible.builtin.template:
+    src: graylog.env.j2
+    dest: "{{ graylog_project_dir }}/{{ graylog_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: graylog_enabled | bool
+
+- name: Deploy Graylog with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ graylog_project_name }}"
+    project_src: "{{ graylog_project_dir }}"
+    files:
+      - "{{ graylog_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: graylog_compose_result
+  when:
+    - graylog_enabled | bool
+    - graylog_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Show Graylog compose actions
+  ansible.builtin.debug:
+    var: graylog_compose_result.actions
+  when:
+    - graylog_enabled | bool
+    - graylog_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Note Graylog render-only mode
+  ansible.builtin.debug:
+    msg: "Graylog compose and env were rendered, but runtime management is disabled."
+  when:
+    - graylog_enabled | bool
+    - not (graylog_manage_runtime | bool)
+
+- name: Skip Graylog compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Graylog docker compose deployment."
+  when:
+    - graylog_enabled | bool
+    - graylog_manage_runtime | bool
+    - ansible_check_mode

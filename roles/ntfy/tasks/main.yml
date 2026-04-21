@@ -1,0 +1,74 @@
+---
+- name: Resolve ntfy image for this architecture
+  ansible.builtin.set_fact:
+    ntfy_image: "{{ ntfy_arch_image_map.get(ansible_architecture, ntfy_arch_image_map.get('default')) }}"
+    ntfy_environment: >-
+      {{
+        {
+          'TZ': timezone,
+          'NTFY_BASE_URL': ntfy_base_url,
+          'NTFY_CACHE_FILE': '/var/lib/ntfy/cache.db',
+          'NTFY_AUTH_FILE': '/var/lib/ntfy/auth.db',
+          'NTFY_AUTH_DEFAULT_ACCESS': 'deny-all',
+          'NTFY_BEHIND_PROXY': 'true',
+          'NTFY_ATTACHMENT_CACHE_DIR': '/var/lib/ntfy/attachments',
+          'NTFY_ENABLE_LOGIN': 'true'
+        } | combine(ntfy_environment_extra)
+      }}
+
+- name: Validate ntfy role inputs
+  ansible.builtin.assert:
+    that:
+      - ntfy_base_url | length > 0
+      - ntfy_config_dir | length > 0
+      - ntfy_state_dir | length > 0
+      - ntfy_image | length > 0
+    fail_msg: "ntfy_base_url, ntfy_config_dir, ntfy_state_dir, and a resolved ntfy image must be defined."
+
+- name: Ensure ntfy project directory exists
+  ansible.builtin.file:
+    path: "{{ ntfy_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure ntfy data directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ ntfy_config_dir }}"
+    - "{{ ntfy_state_dir }}"
+
+- name: Render ntfy compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/ntfy.compose.yml.j2"
+    dest: "{{ ntfy_project_dir }}/{{ ntfy_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy ntfy with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ ntfy_project_name }}"
+    project_src: "{{ ntfy_project_dir }}"
+    files:
+      - "{{ ntfy_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: ntfy_compose_result
+  when: not ansible_check_mode
+
+- name: Show ntfy compose actions
+  ansible.builtin.debug:
+    var: ntfy_compose_result.actions
+  when: not ansible_check_mode
+
+- name: Skip ntfy compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping ntfy docker compose deployment."
+  when: ansible_check_mode
