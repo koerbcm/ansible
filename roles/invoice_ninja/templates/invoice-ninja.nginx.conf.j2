@@ -1,0 +1,28 @@
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    root /var/www/html/public;
+    index index.php index.html;
+
+    client_max_body_size {{ invoice_ninja_client_max_body_size }};
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass {{ invoice_ninja_app_service_name }}:{{ invoice_ninja_app_listen_port }};
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_read_timeout {{ invoice_ninja_fastcgi_read_timeout }};
+    }
+
+    location ~* \.(?:css|js|jpg|jpeg|gif|png|svg|ico|webp|woff2?)$ {
+        expires 7d;
+        access_log off;
+    }
+}

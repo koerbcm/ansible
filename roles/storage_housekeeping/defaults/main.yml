@@ -1,0 +1,22 @@
+---
+storage_housekeeping_enabled: true
+storage_housekeeping_apply: true
+
+storage_housekeeping_df_paths:
+  - /
+
+storage_housekeeping_include_docker: true
+storage_housekeeping_fail_when_docker_missing: false
+storage_housekeeping_prune_stopped_containers: true
+storage_housekeeping_prune_stopped_containers_until: 168h
+storage_housekeeping_prune_dangling_images: true
+storage_housekeeping_prune_unused_images: false
+storage_housekeeping_prune_unused_images_until: 720h
+storage_housekeeping_prune_builder_cache: true
+storage_housekeeping_prune_builder_cache_until: 336h
+storage_housekeeping_prune_networks: false
+storage_housekeeping_prune_volumes: false
+
+storage_housekeeping_include_journal_cleanup: true
+storage_housekeeping_journal_vacuum_time: 30d
+storage_housekeeping_include_tmpfiles_cleanup: true

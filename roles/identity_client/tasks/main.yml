@@ -46,12 +46,73 @@
   loop: "{{ identity_client_nsswitch_map | dict2items }}"
   when: identity_client_enabled | bool
 
+- name: Check packaged SSSD responder helper permissions
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop: "{{ identity_client_packaged_responder_permission_fixes }}"
+  register: identity_client_packaged_responder_permission_stats
+  when:
+    - identity_client_enabled | bool
+    - identity_client_fix_packaged_responder_permissions | bool
+
+- name: Normalize packaged SSSD responder helper permissions
+  ansible.builtin.file:
+    path: "{{ item.item.path }}"
+    state: file
+    owner: "{{ item.item.owner | default('root') }}"
+    group: "{{ item.item.group | default('root') }}"
+    mode: "{{ item.item.mode | default('0755') }}"
+  loop: "{{ identity_client_packaged_responder_permission_stats.results | default([]) }}"
+  when:
+    - identity_client_enabled | bool
+    - identity_client_fix_packaged_responder_permissions | bool
+    - item.stat.exists | default(false)
+
 - name: Ensure sssd service is enabled and started
   ansible.builtin.systemd_service:
     name: sssd
     enabled: true
     state: started
-  when: identity_client_enabled | bool
+  when:
+    - identity_client_enabled | bool
+    - not ansible_check_mode
+
+- name: Gather service facts for responder socket management
+  ansible.builtin.service_facts:
+  when:
+    - identity_client_enabled | bool
+    - identity_client_manage_responder_sockets | bool
+    - not ansible_check_mode
+
+- name: Compute available and missing SSSD responder socket units
+  ansible.builtin.set_fact:
+    identity_client_responder_socket_units_present: >-
+      {{
+        identity_client_responder_socket_units
+        | select('in', (ansible_facts.services.keys() | list))
+        | list
+      }}
+    identity_client_responder_socket_units_absent: >-
+      {{
+        identity_client_responder_socket_units
+        | reject('in', (ansible_facts.services.keys() | list))
+        | list
+      }}
+  when:
+    - identity_client_enabled | bool
+    - identity_client_manage_responder_sockets | bool
+    - not ansible_check_mode
+
+- name: Report missing SSSD responder socket units
+  ansible.builtin.debug:
+    msg: >-
+      Skipping missing SSSD responder socket units:
+      {{ identity_client_responder_socket_units_absent | join(', ') }}.
+  when:
+    - identity_client_enabled | bool
+    - identity_client_manage_responder_sockets | bool
+    - not ansible_check_mode
+    - (identity_client_responder_socket_units_absent | default([]) | length) > 0
 
 - name: Disable redundant SSSD responder socket units
   ansible.builtin.systemd_service:
@@ -59,25 +120,30 @@
     enabled: false
     state: stopped
     masked: true
-  loop: "{{ identity_client_responder_socket_units }}"
+  loop: "{{ identity_client_responder_socket_units_present | default([]) }}"
   when:
     - identity_client_enabled | bool
     - identity_client_manage_responder_sockets | bool
+    - not ansible_check_mode
 
 - name: Clear failed state for disabled SSSD responder sockets
   ansible.builtin.command:
-    cmd: "systemctl reset-failed {{ identity_client_responder_socket_units | join(' ') }}"
+    cmd: "systemctl reset-failed {{ identity_client_responder_socket_units_present | join(' ') }}"
   changed_when: false
   failed_when: false
   when:
     - identity_client_enabled | bool
     - identity_client_manage_responder_sockets | bool
+    - not ansible_check_mode
+    - (identity_client_responder_socket_units_present | default([]) | length) > 0
 
 - name: Validate rendered sssd configuration
   ansible.builtin.command:
     cmd: sssctl config-check
   changed_when: false
-  when: identity_client_enabled | bool
+  when:
+    - identity_client_enabled | bool
+    - not ansible_check_mode
 
 - name: Validate LDAP-backed identity lookup
   ansible.builtin.command:
@@ -86,3 +152,11 @@
   when:
     - identity_client_enabled | bool
     - identity_client_validation_user | length > 0
+    - not ansible_check_mode
+
+- name: Skip identity service validation in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping SSSD service/state validation because package installation is simulated."
+  when:
+    - identity_client_enabled | bool
+    - ansible_check_mode

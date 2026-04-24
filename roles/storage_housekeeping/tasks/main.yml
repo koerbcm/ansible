@@ -1,0 +1,220 @@
+---
+- name: Validate storage housekeeping settings
+  ansible.builtin.assert:
+    that:
+      - storage_housekeeping_df_paths is iterable
+      - storage_housekeeping_df_paths | length > 0
+      - storage_housekeeping_prune_stopped_containers_until | length > 0
+      - storage_housekeeping_prune_unused_images_until | length > 0
+      - storage_housekeeping_prune_builder_cache_until | length > 0
+      - storage_housekeeping_journal_vacuum_time | length > 0
+    fail_msg: "Storage housekeeping configuration is invalid."
+    success_msg: "Storage housekeeping configuration is valid."
+  when: storage_housekeeping_enabled | bool
+
+- name: Note storage housekeeping skipped on host
+  ansible.builtin.debug:
+    msg: "Storage housekeeping role is disabled on this host."
+  when: not (storage_housekeeping_enabled | bool)
+
+- name: Capture disk usage before housekeeping
+  ansible.builtin.command:
+    cmd: "df -h {{ item }}"
+  loop: "{{ storage_housekeeping_df_paths }}"
+  register: storage_housekeeping_df_before
+  changed_when: false
+  failed_when: false
+  when: storage_housekeeping_enabled | bool
+
+- name: Check docker availability
+  ansible.builtin.command:
+    cmd: "docker version --format {{ '{{.Server.Version}}' }}"
+  register: storage_housekeeping_docker_version
+  changed_when: false
+  failed_when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_fail_when_docker_missing | bool
+    - storage_housekeeping_docker_version.rc != 0
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_include_docker | bool
+
+- name: Capture docker usage before housekeeping
+  ansible.builtin.command:
+    cmd: docker system df
+  register: storage_housekeeping_docker_df_before
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_version.rc == 0
+
+- name: Report storage housekeeping plan
+  ansible.builtin.debug:
+    msg:
+      - "Apply mode: {{ storage_housekeeping_apply | bool }}"
+      - "Check mode: {{ ansible_check_mode | bool }}"
+      - "Docker available: {{ (storage_housekeeping_docker_version.rc == 0) if (storage_housekeeping_include_docker | bool) else false }}"
+      - "Prune stopped containers: {{ storage_housekeeping_prune_stopped_containers | bool }} (until {{ storage_housekeeping_prune_stopped_containers_until }})"
+      - "Prune dangling images: {{ storage_housekeeping_prune_dangling_images | bool }}"
+      - "Prune unused images: {{ storage_housekeeping_prune_unused_images | bool }} (until {{ storage_housekeeping_prune_unused_images_until }})"
+      - "Prune builder cache: {{ storage_housekeeping_prune_builder_cache | bool }} (until {{ storage_housekeeping_prune_builder_cache_until }})"
+      - "Prune unused networks: {{ storage_housekeeping_prune_networks | bool }}"
+      - "Prune unused volumes: {{ storage_housekeeping_prune_volumes | bool }}"
+      - "Journal vacuum: {{ storage_housekeeping_include_journal_cleanup | bool }} ({{ storage_housekeeping_journal_vacuum_time }})"
+      - "Tmpfiles cleanup: {{ storage_housekeeping_include_tmpfiles_cleanup | bool }}"
+  when: storage_housekeeping_enabled | bool
+
+- name: Prune stopped docker containers
+  ansible.builtin.command:
+    cmd: "docker container prune -f --filter until={{ storage_housekeeping_prune_stopped_containers_until }}"
+  register: storage_housekeeping_prune_containers
+  changed_when: "'Total reclaimed space: 0B' not in storage_housekeeping_prune_containers.stdout"
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_apply | bool
+    - not ansible_check_mode
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_version.rc == 0
+    - storage_housekeeping_prune_stopped_containers | bool
+
+- name: Prune dangling docker images
+  ansible.builtin.command:
+    cmd: docker image prune -f
+  register: storage_housekeeping_prune_dangling_images_result
+  changed_when: "'Total reclaimed space: 0B' not in storage_housekeeping_prune_dangling_images_result.stdout"
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_apply | bool
+    - not ansible_check_mode
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_version.rc == 0
+    - storage_housekeeping_prune_dangling_images | bool
+
+- name: Prune unused docker images
+  ansible.builtin.command:
+    cmd: "docker image prune -a -f --filter until={{ storage_housekeeping_prune_unused_images_until }}"
+  register: storage_housekeeping_prune_unused_images_result
+  changed_when: "'Total reclaimed space: 0B' not in storage_housekeeping_prune_unused_images_result.stdout"
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_apply | bool
+    - not ansible_check_mode
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_version.rc == 0
+    - storage_housekeeping_prune_unused_images | bool
+
+- name: Prune docker builder cache
+  ansible.builtin.command:
+    cmd: "docker builder prune -f --filter until={{ storage_housekeeping_prune_builder_cache_until }}"
+  register: storage_housekeeping_prune_builder_cache_result
+  changed_when: "'Total reclaimed space: 0B' not in storage_housekeeping_prune_builder_cache_result.stdout"
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_apply | bool
+    - not ansible_check_mode
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_version.rc == 0
+    - storage_housekeeping_prune_builder_cache | bool
+
+- name: Prune unused docker networks
+  ansible.builtin.command:
+    cmd: docker network prune -f
+  register: storage_housekeeping_prune_networks_result
+  changed_when: "'Total reclaimed space: 0B' not in storage_housekeeping_prune_networks_result.stdout"
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_apply | bool
+    - not ansible_check_mode
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_version.rc == 0
+    - storage_housekeeping_prune_networks | bool
+
+- name: Prune unused docker volumes
+  ansible.builtin.command:
+    cmd: docker volume prune -f
+  register: storage_housekeeping_prune_volumes_result
+  changed_when: "'Total reclaimed space: 0B' not in storage_housekeeping_prune_volumes_result.stdout"
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_apply | bool
+    - not ansible_check_mode
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_version.rc == 0
+    - storage_housekeeping_prune_volumes | bool
+
+- name: Vacuum journal logs
+  ansible.builtin.command:
+    cmd: "journalctl --vacuum-time={{ storage_housekeeping_journal_vacuum_time }}"
+  register: storage_housekeeping_journal_vacuum
+  changed_when:
+    - storage_housekeeping_journal_vacuum.stdout | default('') | length > 0
+    - "'Freed 0B' not in storage_housekeeping_journal_vacuum.stdout"
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_apply | bool
+    - not ansible_check_mode
+    - storage_housekeeping_include_journal_cleanup | bool
+
+- name: Run systemd tmpfiles cleanup
+  ansible.builtin.command:
+    cmd: systemd-tmpfiles --clean
+  register: storage_housekeeping_tmpfiles_clean
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_apply | bool
+    - not ansible_check_mode
+    - storage_housekeeping_include_tmpfiles_cleanup | bool
+
+- name: Capture disk usage after housekeeping
+  ansible.builtin.command:
+    cmd: "df -h {{ item }}"
+  loop: "{{ storage_housekeeping_df_paths }}"
+  register: storage_housekeeping_df_after
+  changed_when: false
+  failed_when: false
+  when: storage_housekeeping_enabled | bool
+
+- name: Capture docker usage after housekeeping
+  ansible.builtin.command:
+    cmd: docker system df
+  register: storage_housekeeping_docker_df_after
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_version.rc == 0
+
+- name: Report storage housekeeping disk usage before/after
+  ansible.builtin.debug:
+    msg:
+      - "Before: {{ item.0.stdout_lines | default([]) }}"
+      - "After: {{ item.1.stdout_lines | default([]) }}"
+  loop: "{{ (storage_housekeeping_df_before.results | default([])) | zip(storage_housekeeping_df_after.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.item }}"
+  when:
+    - storage_housekeeping_enabled | bool
+    - (storage_housekeeping_df_before.results | default([]) | length) > 0
+    - (storage_housekeeping_df_after.results | default([]) | length) > 0
+
+- name: Report docker usage before housekeeping
+  ansible.builtin.debug:
+    var: storage_housekeeping_docker_df_before.stdout_lines
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_df_before is defined
+
+- name: Report docker usage after housekeeping
+  ansible.builtin.debug:
+    var: storage_housekeeping_docker_df_after.stdout_lines
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_include_docker | bool
+    - storage_housekeeping_docker_df_after is defined

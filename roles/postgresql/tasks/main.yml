@@ -41,13 +41,24 @@
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
-    owner: "{{ item.owner }}"
-    group: "{{ item.group }}"
     mode: "{{ item.mode | default('0755') }}"
   loop: "{{ postgresql_managed_host_paths }}"
   loop_control:
     label: "{{ item.path }}"
   when: postgresql_enabled | bool
+
+- name: Ensure PostgreSQL managed host path ownership
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+  loop: "{{ postgresql_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - postgresql_enabled | bool
+    - not ansible_check_mode
 
 - name: Ensure PostgreSQL managed host path ownership is recursive
   ansible.builtin.file:
@@ -61,6 +72,7 @@
     label: "{{ item.path }}"
   when:
     - postgresql_enabled | bool
+    - not ansible_check_mode
     - item.recurse_owner_group | default(false)
 
 - name: Ensure PostgreSQL data directory exists

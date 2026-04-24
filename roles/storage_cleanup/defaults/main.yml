@@ -3,3 +3,5 @@ storage_cleanup_enabled: false
 storage_cleanup_apply: false
 storage_cleanup_abort_if_in_use: true
 storage_cleanup_docker_volume_candidates: []
+storage_cleanup_container_candidates: []
+storage_cleanup_force_remove_containers: true

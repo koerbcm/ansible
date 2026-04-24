@@ -99,9 +99,27 @@ n8n_backup_enabled: true
 n8n_backup_source_dir: /srv/n8n/data
 n8n_backup_on_calendar: "*-*-* 01:50:00"
 
+invoice_ninja_enabled: true
+invoice_ninja_manage_runtime: true
+invoice_ninja_project_name: invoice-ninja-local
+invoice_ninja_project_dir: /opt/stacks/invoice-ninja
+invoice_ninja_app_url: http://docker2.kirby.lan:13080
+invoice_ninja_web_published_port: 13080
+invoice_ninja_require_https: false
+invoice_ninja_trusted_proxies: "*"
+invoice_ninja_db_root_password: "{{ docker2_invoice_ninja_db_root_password | default('') }}"
+invoice_ninja_db_password: "{{ docker2_invoice_ninja_db_password | default('') }}"
+invoice_ninja_app_key: "{{ docker2_invoice_ninja_app_key | default('') }}"
+invoice_ninja_initial_user_email: "{{ docker2_invoice_ninja_admin_email | default('') }}"
+invoice_ninja_initial_user_password: "{{ docker2_invoice_ninja_admin_password | default('') }}"
+invoice_ninja_data_root: /srv/invoice-ninja
+invoice_ninja_backup_enabled: true
+invoice_ninja_backup_on_calendar: "*-*-* 01:55:00"
+
 maintenance_pre_backup_services:
   - postgresql-backup.service
   - n8n-backup.service
+  - invoice-ninja-backup.service
   - plex-backup.service
 
 watchtower_enabled: true
@@ -140,6 +158,15 @@ service_backlog:
   - name: n8n
     status: active_local_with_backups
     goal: keep app data and PostgreSQL state protected with scheduled backups
+  - name: invoice-ninja
+    status: active_local_with_backups
+    goal: keep Invoice Ninja app and database state on local disk with scheduled backups
+  - name: invoice-ninja-routing
+    status: pending_external_domain_cutover
+    goal: add pfSense/HAProxy domain routing and TLS-offload path for Invoice Ninja
+  - name: invoice-ninja-monitoring
+    status: pending_external_monitor_url
+    goal: add/update Uptime Kuma External / Invoice Ninja monitor once the final public URL is set
   - name: watchtower
     status: codified_inactive
     goal: keep rendered in Ansible while leaving runtime disabled for now
@@ -149,9 +176,6 @@ service_backlog:
   - name: kibana
     status: inactive
     goal: preserve as later backlog and decide whether to retire or rebuild
-  - name: invoice-ninja
-    status: image_and_nfs_volumes_only
-    goal: determine whether it should be revived or removed from discovery backlog
   - name: obsidian
     status: image_and_nfs_volume_only
     goal: determine whether it should be revived or removed from discovery backlog
@@ -173,6 +197,9 @@ host_application_inventory:
     - name: n8n
       role: n8n
       managed_by_ansible: true
+    - name: invoice-ninja
+      role: invoice_ninja
+      managed_by_ansible: true
     - name: kibana
       role: kibana
       managed_by_ansible: false
@@ -183,9 +210,6 @@ host_application_inventory:
       role: watchtower
       managed_by_ansible: false
   discovered_images_only:
-    - name: invoiceninja/invoiceninja-debian:latest
-      role: invoice-ninja
-      managed_by_ansible: false
     - name: lscr.io/linuxserver/obsidian:latest
       role: obsidian
       managed_by_ansible: false

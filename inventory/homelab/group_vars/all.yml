@@ -19,6 +19,7 @@ base_packages:
 base_groups:
   - name: koerbcm
     gid: 1032
+  - name: docker
 
 base_users:
   - name: koerbcm
@@ -36,7 +37,15 @@ base_users:
       - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDuRzZcXqUHnZLYe7+71Macn8NGMSqdw3E/lXE6Wy+iIRb6SmQlzTOiaWuaFDjN2gcyktxgTaTTCs7nlhenGz+AHAiKsWRDRGOanSQ89zvjV8cwUS+0DAbXvMUcN1Mvh7qhFyYxYQjU78tH/8HNxtvHc76yLrL7Ff5ea0MPlRu1/Z67CXhba84mb+Ayu/PYzZA89wiAUzi1OxJEj1ePLeewegL4DVUCDQ8rEIUm5Ti5ewv7NbkJCLnUsSUrhB6n80uFvi937+iUaGu8cpVLqJDGmPg1j7kUWmIz3N+MWlQ0QGcWV/HH3q6bpo87ObInpYRE5M0FiFdVLdfZJRIxGwJlQA2owiOWXBQoCeent2Ys56EZXqN+4aTru/WGxubCq26B75mdmqxVwJyBRkddejrUFAGnhw2uMIiPkBxO09lBS2NM8W/FovJDwEEObuAiDU1EaSFsnvQVxYN0SfwEnu9M+/4Nfk/6o8WMAEIpQLPeNeq2aolsLP4rmbWwjgMDpLZvlelcfnrplZ5UKPqZkAJw4aW1W+mtjHn4/P4bzxEMi/PPVxoA5xJ/kjBUzOIhcRLQu0pti0B0e/dq1GtIN12OXs4CCcTLJZgJqdh7gHvIsN8ZXxRtPwRyBS5w5eLupLhYwugeCyhWKuLPy9YHp8pGoDn2egcJwyI6MoqnC6Nk/Q== koerbcm@playful-steed
       - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCplWH6EsNYSN4MKmu6C5d8AuyCuvUTN9hwH9u/i9u0xcIOKCG5y6RADCiORZ9Um1APiuXrzBXvKZVeb1iLfIbnak4GujJ5JNT4i5Z8kfQ9Oj5DdYJXxjJOvk1zxmafdqmJfjL7gQ+3CfKhgZPZHb0WvTtUJTK/B9RlXdrwFsbT4GYJ3CwOEZeWQ/zk+h0oKc0TuQ/RIk4H1OLHXzhsxBN72xAUiuBda5hlz1ACWjrbuRQz+Q1ROfGvBxFj1rIxe1z3ACWOtGdtfcndCty7fNH4R8GbiFl6ToTy9/1T1Jk/BfBhE7uvIGgTppeiqWZzZjw8wQEz+5qq7H1Fv2LDfglG0ghtMJ7wvoLGvJRLvvjkuT6TvNaXwBKF/KY8p/ypC4dEWxTb/CsL1kw3NS9m8J+mQQ39AI9MoS9SGhdmr5Jmd19tPCj4vMS00wN7dr9SHlRIqLnThr9IQcKYCk/o4ti2N91JnaSoIMYaCIsB336aN0Tdx3rb0gtiVnqHgWc+ARc= koerbcm@docker1
 
-base_extra_users: []
+base_extra_users:
+  - name: docker
+    uid: 1000
+    comment: Container runtime service account
+    group: docker
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+    create_home: false
+    password: "!"
 base_break_glass_users:
   - koerbcm
 base_require_break_glass_passwords: true
@@ -95,7 +104,16 @@ uptime_kuma_api_maintenance_id: "3"
 uptime_kuma_monitor_audit_api_maintenance_path: "/maintenance"
 uptime_kuma_api_validate_certs: true
 
-nfs_mounts: []
+nfs_mounts:
+  # Baseline mounts for new hosts. Host-specific files can override/extend.
+  - path: /mnt/dockerVolumes
+    src: 10.27.27.9:/volume1/dockerVolumes
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
+  - path: /mnt/backups
+    src: 10.27.27.9:/volume1/backups
+    fstype: nfs
+    opts: auto,defaults,nofail,users,x-systemd.after=network-online.target,x-systemd.device-timeout=5s,x-systemd.automount
 
 ntfy_version: v2.21.0
 ntfy_arch_image_map:

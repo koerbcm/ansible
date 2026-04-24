@@ -75,6 +75,15 @@
         - ntfy
         - apps
 
+- name: Uptime Kuma
+  hosts: uptime_kuma_hosts
+  become: true
+  roles:
+    - role: uptime_kuma
+      tags:
+        - uptime-kuma
+        - apps
+
 - name: Radarr
   hosts: radarr_hosts
   become: true
@@ -174,6 +183,15 @@
         - n8n
         - apps
 
+- name: Invoice Ninja
+  hosts: invoice_ninja_hosts
+  become: true
+  roles:
+    - role: invoice_ninja
+      tags:
+        - invoice-ninja
+        - apps
+
 - name: Portainer
   hosts: portainer_hosts
   become: true
@@ -271,6 +289,24 @@
     - role: n8n_backup
       tags:
         - n8n-backup
+        - backup
+
+- name: Invoice Ninja backup jobs
+  hosts: invoice_ninja_backup_hosts
+  become: true
+  roles:
+    - role: invoice_ninja_backup
+      tags:
+        - invoice-ninja-backup
+        - backup
+
+- name: Uptime Kuma backup jobs
+  hosts: uptime_kuma_backup_hosts
+  become: true
+  roles:
+    - role: uptime_kuma_backup
+      tags:
+        - uptime-kuma-backup
         - backup
 
 - name: Plex backup jobs

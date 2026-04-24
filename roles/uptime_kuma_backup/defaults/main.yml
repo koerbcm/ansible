@@ -1,0 +1,12 @@
+---
+uptime_kuma_backup_enabled: false
+
+uptime_kuma_backup_scripts_dir: /usr/local/bin
+uptime_kuma_backup_root: "/mnt/backups/{{ inventory_hostname }}/uptime-kuma"
+uptime_kuma_backup_data_dir: "{{ uptime_kuma_data_dir | default('/srv/uptime-kuma/data') }}"
+uptime_kuma_backup_project_dir: "{{ uptime_kuma_project_dir | default('/opt/stacks/uptime-kuma') }}"
+uptime_kuma_backup_container_name: "{{ uptime_kuma_container_name | default('uptime-kuma') }}"
+uptime_kuma_backup_retention_days: 60
+uptime_kuma_backup_on_calendar: "*-*-* 01:20:00"
+uptime_kuma_backup_stop_container: true
+uptime_kuma_backup_include_project_files: true

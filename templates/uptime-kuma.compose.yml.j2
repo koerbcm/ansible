@@ -1,0 +1,13 @@
+services:
+  {{ uptime_kuma_service_name }}:
+    image: {{ uptime_kuma_image | quote }}
+    container_name: {{ uptime_kuma_container_name | quote }}
+    environment:
+{% for key, value in uptime_kuma_environment | dictsort %}
+      {{ key }}: {{ value | string | quote }}
+{% endfor %}
+    volumes:
+      - {{ uptime_kuma_data_dir }}:/app/data
+    ports:
+      - "{{ uptime_kuma_published_port }}:{{ uptime_kuma_container_port }}"
+    restart: unless-stopped

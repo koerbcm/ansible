@@ -3,7 +3,8 @@
   ansible.builtin.assert:
     that:
       - storage_cleanup_docker_volume_candidates is iterable
-    fail_msg: "storage_cleanup_docker_volume_candidates must be a list."
+      - storage_cleanup_container_candidates is iterable
+    fail_msg: "storage_cleanup_docker_volume_candidates and storage_cleanup_container_candidates must be lists."
     success_msg: "Storage cleanup configuration is valid."
   when: storage_cleanup_enabled | bool
 
@@ -14,7 +15,10 @@
   changed_when: false
   failed_when:
     - storage_cleanup_enabled | bool
-    - storage_cleanup_docker_volume_candidates | length > 0
+    - >
+      (storage_cleanup_docker_volume_candidates | length > 0)
+      or
+      (storage_cleanup_container_candidates | length > 0)
     - storage_cleanup_docker_version.rc != 0
   when: storage_cleanup_enabled | bool
 
@@ -28,6 +32,7 @@
   when:
     - storage_cleanup_enabled | bool
     - storage_cleanup_docker_version.rc == 0
+    - storage_cleanup_docker_volume_candidates | length > 0
 
 - name: Build existing/missing candidate lists
   ansible.builtin.set_fact:
@@ -59,6 +64,7 @@
   when:
     - storage_cleanup_enabled | bool
     - storage_cleanup_docker_version.rc == 0
+    - (storage_cleanup_existing_volumes | default([]) | length) > 0
 
 - name: Build in-use/removable candidate lists
   ansible.builtin.set_fact:
@@ -80,6 +86,38 @@
     - storage_cleanup_enabled | bool
     - storage_cleanup_docker_version.rc == 0
 
+- name: Check whether candidate docker containers exist
+  ansible.builtin.command:
+    cmd: "docker container inspect {{ item }}"
+  loop: "{{ storage_cleanup_container_candidates }}"
+  register: storage_cleanup_container_inspect
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_docker_version.rc == 0
+    - storage_cleanup_container_candidates | length > 0
+
+- name: Build existing/missing candidate container lists
+  ansible.builtin.set_fact:
+    storage_cleanup_existing_containers: >-
+      {{
+        storage_cleanup_container_inspect.results | default([])
+        | selectattr('rc', 'equalto', 0)
+        | map(attribute='item')
+        | list
+      }}
+    storage_cleanup_missing_containers: >-
+      {{
+        storage_cleanup_container_inspect.results | default([])
+        | rejectattr('rc', 'equalto', 0)
+        | map(attribute='item')
+        | list
+      }}
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_docker_version.rc == 0
+
 - name: Report storage cleanup dry-run summary
   ansible.builtin.debug:
     msg:
@@ -89,6 +127,9 @@
       - "Missing candidate volumes: {{ storage_cleanup_missing_volumes | default([]) | length }}"
       - "In-use candidate volumes: {{ storage_cleanup_in_use_volumes | default([]) | length }}"
       - "Removable candidate volumes: {{ storage_cleanup_removable_volumes | default([]) | length }}"
+      - "Candidate containers: {{ storage_cleanup_container_candidates | length }}"
+      - "Existing candidate containers: {{ storage_cleanup_existing_containers | default([]) | length }}"
+      - "Missing candidate containers: {{ storage_cleanup_missing_containers | default([]) | length }}"
   when: storage_cleanup_enabled | bool
 
 - name: Report missing candidate volumes
@@ -111,6 +152,20 @@
   when:
     - storage_cleanup_enabled | bool
     - (storage_cleanup_removable_volumes | default([]) | length) > 0
+
+- name: Report missing candidate containers
+  ansible.builtin.debug:
+    var: storage_cleanup_missing_containers
+  when:
+    - storage_cleanup_enabled | bool
+    - (storage_cleanup_missing_containers | default([]) | length) > 0
+
+- name: Report removable candidate containers
+  ansible.builtin.debug:
+    var: storage_cleanup_existing_containers
+  when:
+    - storage_cleanup_enabled | bool
+    - (storage_cleanup_existing_containers | default([]) | length) > 0
 
 - name: Abort apply mode when candidate volumes are still in use
   ansible.builtin.assert:
@@ -144,6 +199,27 @@
     - storage_cleanup_enabled | bool
     - storage_cleanup_apply | bool
     - storage_cleanup_volume_rm is defined
+
+- name: Remove candidate docker containers
+  ansible.builtin.command:
+    cmd: >-
+      docker rm{% if storage_cleanup_force_remove_containers | bool %} -f{% endif %} {{ item }}
+  loop: "{{ storage_cleanup_existing_containers | default([]) }}"
+  register: storage_cleanup_container_rm
+  changed_when: true
+  failed_when: storage_cleanup_container_rm.rc != 0
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_apply | bool
+    - (storage_cleanup_existing_containers | default([]) | length) > 0
+
+- name: Report removed docker containers
+  ansible.builtin.debug:
+    msg: "{{ storage_cleanup_container_rm.results | default([]) | map(attribute='stdout') | list }}"
+  when:
+    - storage_cleanup_enabled | bool
+    - storage_cleanup_apply | bool
+    - storage_cleanup_container_rm is defined
 
 - name: Note storage cleanup skipped on host
   ansible.builtin.debug:

@@ -1,0 +1,96 @@
+---
+invoice_ninja_enabled: false
+invoice_ninja_manage_runtime: false
+
+invoice_ninja_project_name: invoice-ninja
+invoice_ninja_project_dir: "{{ homelab_stack_root }}/invoice-ninja"
+invoice_ninja_compose_file: compose.yml
+invoice_ninja_env_file: .env
+invoice_ninja_nginx_conf_dir: "{{ invoice_ninja_project_dir }}/nginx"
+invoice_ninja_nginx_conf_file: invoice-ninja.conf
+
+invoice_ninja_app_image: invoiceninja/invoiceninja-debian:latest
+invoice_ninja_app_service_name: app
+invoice_ninja_app_container_name: invoice-ninja-app-local
+invoice_ninja_app_listen_port: 9000
+
+invoice_ninja_web_image: nginx:1.27-alpine
+invoice_ninja_web_service_name: web
+invoice_ninja_web_container_name: invoice-ninja-web-local
+invoice_ninja_web_published_port: 13080
+invoice_ninja_client_max_body_size: 20m
+invoice_ninja_fastcgi_read_timeout: 300
+
+invoice_ninja_db_image: mysql:8.4
+invoice_ninja_db_service_name: db
+invoice_ninja_db_container_name: invoice-ninja-db-local
+invoice_ninja_db_root_password: "{{ docker2_invoice_ninja_db_root_password | default('') }}"
+invoice_ninja_db_database: invoice_ninja
+invoice_ninja_db_user: invoice_ninja
+invoice_ninja_db_password: "{{ docker2_invoice_ninja_db_password | default('') }}"
+invoice_ninja_db_extra_flags: ""
+invoice_ninja_db_stop_grace_period: 120s
+
+invoice_ninja_redis_image: redis:7-alpine
+invoice_ninja_redis_service_name: redis
+invoice_ninja_redis_container_name: invoice-ninja-redis-local
+
+invoice_ninja_app_url: http://docker2.kirby.lan:13080
+invoice_ninja_app_key: "{{ docker2_invoice_ninja_app_key | default('') }}"
+invoice_ninja_app_env: production
+invoice_ninja_app_debug: false
+invoice_ninja_require_https: false
+invoice_ninja_trusted_proxies: "*"
+invoice_ninja_initial_user_email: "{{ docker2_invoice_ninja_admin_email | default('') }}"
+invoice_ninja_initial_user_password: "{{ docker2_invoice_ninja_admin_password | default('') }}"
+invoice_ninja_cache_driver: redis
+invoice_ninja_queue_connection: database
+invoice_ninja_session_driver: redis
+invoice_ninja_redis_password: ""
+invoice_ninja_timezone: "{{ timezone }}"
+
+invoice_ninja_mail_mailer: log
+invoice_ninja_mail_host: ""
+invoice_ninja_mail_port: 587
+invoice_ninja_mail_username: ""
+invoice_ninja_mail_password: ""
+invoice_ninja_mail_encryption: tls
+invoice_ninja_mail_from_address: ""
+invoice_ninja_mail_from_name: "Invoice Ninja"
+
+invoice_ninja_data_root: /srv/invoice-ninja
+invoice_ninja_data_public_dir: "{{ invoice_ninja_data_root }}/app_public"
+invoice_ninja_data_storage_dir: "{{ invoice_ninja_data_root }}/app_storage"
+invoice_ninja_data_mysql_dir: "{{ invoice_ninja_data_root }}/mysql_data"
+invoice_ninja_data_redis_dir: "{{ invoice_ninja_data_root }}/redis_data"
+invoice_ninja_allow_network_data_dir: false
+
+invoice_ninja_managed_host_paths:
+  - path: "{{ invoice_ninja_data_root }}"
+    owner: "root"
+    group: "root"
+    mode: "0755"
+  - path: "{{ invoice_ninja_data_public_dir }}"
+    owner: "33"
+    group: "33"
+    mode: "0755"
+    recurse_owner_group: true
+  - path: "{{ invoice_ninja_data_storage_dir }}"
+    owner: "33"
+    group: "33"
+    mode: "0755"
+    recurse_owner_group: true
+  - path: "{{ invoice_ninja_data_mysql_dir }}"
+    owner: "999"
+    group: "999"
+    mode: "0750"
+    recurse_owner_group: true
+  - path: "{{ invoice_ninja_data_redis_dir }}"
+    owner: "999"
+    group: "1000"
+    mode: "0755"
+    recurse_owner_group: true
+
+invoice_ninja_watchtower_monitor_only: true
+invoice_ninja_log_driver: json-file
+invoice_ninja_log_options: {}

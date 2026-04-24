@@ -104,10 +104,37 @@
     group: root
   when: timezone | length > 0
 
+- name: Set system hostname when managed by Ansible
+  ansible.builtin.hostname:
+    name: "{{ base_hostname }}"
+  when:
+    - base_hostname_manage | bool
+    - base_hostname | length > 0
+
+- name: Ensure loopback hosts entry includes hostname aliases
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\\.0\\.1\\.1\\s+'
+    line: >-
+      127.0.1.1 {{ base_hostname }}{{
+      (' ' ~ (base_hostname_aliases | join(' '))) if (base_hostname_aliases | length > 0) else '' }}
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - base_hostname | length > 0
+    - base_hostname_manage | bool or (base_hostname_aliases | length > 0)
+
+- name: Build effective baseline groups and users
+  ansible.builtin.set_fact:
+    base_effective_groups: "{{ base_groups + (base_additional_groups | default([])) }}"
+    base_effective_users: "{{ base_users + base_extra_users + (base_additional_users | default([])) }}"
+
 - name: Validate required break-glass accounts have local password hashes
   ansible.builtin.assert:
     that:
-      - item in ((base_users + base_extra_users) | map(attribute='name') | list)
+      - item in (base_effective_users | map(attribute='name') | list)
       - item in base_user_password_hashes
     fail_msg: >-
       Break-glass user {{ item }} must be managed locally and have a password hash
@@ -116,12 +143,334 @@
   loop: "{{ base_break_glass_users }}"
   when: base_require_break_glass_passwords | bool
 
+- name: Validate local group GID migration definitions
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name | length > 0
+      - item.to_gid is defined
+      - (item.to_gid | int) > 0
+    fail_msg: "Each base_group_gid_migrations item requires name and positive to_gid."
+  loop: "{{ base_group_gid_migrations | default([]) }}"
+  when: (base_group_gid_migrations | default([]) | length) > 0
+
+- name: Initialize local group GID migration facts
+  ansible.builtin.set_fact:
+    base_group_gid_migrations_pending: []
+
+- name: Look up current GID for configured group migrations
+  ansible.builtin.command: "getent group {{ item.name }}"
+  register: base_group_gid_migration_lookup
+  changed_when: false
+  failed_when: false
+  loop: "{{ base_group_gid_migrations | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}->{{ item.to_gid }}"
+  when: (base_group_gid_migrations | default([]) | length) > 0
+
+- name: Build pending local group GID migrations
+  ansible.builtin.set_fact:
+    base_group_gid_migrations_pending: >-
+      {{
+        base_group_gid_migrations_pending + [
+          {
+            'name': item.item.name,
+            'current_gid': (item.stdout.split(':')[2] | int),
+            'to_gid': (item.item.to_gid | int)
+          }
+        ]
+      }}
+  loop: "{{ base_group_gid_migration_lookup.results | default([]) }}"
+  when:
+    - item.rc is defined
+    - item.rc == 0
+    - (item.stdout | trim | length) > 0
+    - ((item.stdout | trim).split(':') | length) > 2
+    - (item.stdout.split(':')[2] | int) != (item.item.to_gid | int)
+  loop_control:
+    label: "{{ item.item.name }}->{{ item.item.to_gid }}"
+
+- name: Look up target GID owners for pending local group migrations
+  ansible.builtin.command: "getent group {{ item.to_gid }}"
+  register: base_group_gid_migration_target_lookup
+  changed_when: false
+  failed_when: false
+  loop: "{{ base_group_gid_migrations_pending }}"
+  loop_control:
+    label: "{{ item.name }}->{{ item.to_gid }}"
+  when: (base_group_gid_migrations_pending | length) > 0
+
+- name: Validate target GIDs are available for pending local group migrations
+  ansible.builtin.assert:
+    that:
+      - item.rc != 0 or ((item.stdout | trim | length) > 0 and (item.stdout.split(':')[0] == item.item.name))
+    fail_msg: >-
+      Cannot migrate group {{ item.item.name }} to gid {{ item.item.to_gid }};
+      gid already belongs to group {{ item.stdout.split(':')[0] if item.rc == 0 else 'unknown' }}.
+  loop: "{{ base_group_gid_migration_target_lookup.results | default([]) }}"
+  when: (base_group_gid_migrations_pending | length) > 0
+  loop_control:
+    label: "{{ item.item.name }}->{{ item.item.to_gid }}"
+
+- name: Apply pending local group GID migrations
+  ansible.builtin.group:
+    name: "{{ item.name }}"
+    gid: "{{ item.to_gid }}"
+    state: present
+  loop: "{{ base_group_gid_migrations_pending }}"
+  loop_control:
+    label: "{{ item.name }}: {{ item.current_gid }} -> {{ item.to_gid }}"
+  when: (base_group_gid_migrations_pending | length) > 0
+
+- name: Initialize local group GID conflict facts
+  ansible.builtin.set_fact:
+    base_group_gid_conflicts: []
+    base_group_gid_conflicts_enriched: []
+    base_group_gid_conflicts_unresolved: []
+
+- name: Look up existing groups for requested GIDs
+  ansible.builtin.command: "getent group {{ item.gid }}"
+  register: base_group_existing_gid_lookup
+  changed_when: false
+  failed_when: false
+  loop: >-
+    {{
+      base_effective_groups
+      | select('mapping')
+      | selectattr('gid', 'defined')
+      | rejectattr('name', 'in', (base_groups_ignore_gid_for | default([])))
+      | list
+    }}
+  loop_control:
+    label: "{{ item.name }}:{{ item.gid }}"
+
+- name: Build requested local group GID conflict list
+  ansible.builtin.set_fact:
+    base_group_gid_conflicts: >-
+      {{
+        base_group_gid_conflicts + [
+          {
+            'requested_group': item.item.name,
+            'requested_gid': (item.item.gid | string),
+            'conflicting_group': existing_group_fields[0],
+            'conflicting_group_members': conflicting_group_members
+          }
+        ]
+      }}
+  vars:
+    existing_group_fields: "{{ item.stdout.split(':') }}"
+    conflicting_group_members: >-
+      {{
+        (
+          existing_group_fields[3].split(',')
+          if (existing_group_fields | length > 3 and existing_group_fields[3] | length > 0)
+          else []
+        )
+      }}
+  loop: "{{ base_group_existing_gid_lookup.results | default([]) }}"
+  when:
+    - item.rc is defined
+    - item.rc == 0
+    - (item.stdout | trim | length) > 0
+    - ((item.stdout | trim).split(':') | length) > 2
+    - (item.stdout.split(':')[0]) != item.item.name
+  loop_control:
+    label: "{{ item.item.name }}:{{ item.item.gid }}"
+
+- name: Look up primary users for requested GID conflicts
+  ansible.builtin.shell: "getent passwd | awk -F: '$4 == {{ item.requested_gid }} { print $1 }'"
+  args:
+    executable: /bin/bash
+  register: base_group_gid_conflict_primary_users_lookup
+  changed_when: false
+  loop: "{{ base_group_gid_conflicts }}"
+  loop_control:
+    label: "{{ item.requested_group }}:{{ item.requested_gid }}"
+  when: (base_group_gid_conflicts | length) > 0
+
+- name: Build enriched requested local group GID conflicts
+  ansible.builtin.set_fact:
+    base_group_gid_conflicts_enriched: >-
+      {{
+        base_group_gid_conflicts_enriched + [
+          (
+            item.item
+            | combine(
+                {
+                  'primary_users': (
+                    item.stdout_lines
+                    | reject('equalto', item.item.requested_group)
+                    | list
+                  )
+                }
+              )
+          )
+        ]
+      }}
+  loop: "{{ base_group_gid_conflict_primary_users_lookup.results | default([]) }}"
+  when: (base_group_gid_conflicts | length) > 0
+  loop_control:
+    label: "{{ item.item.requested_group }}:{{ item.item.requested_gid }}"
+
+- name: Remove unused groups that conflict with requested local group GIDs
+  ansible.builtin.group:
+    name: "{{ item.conflicting_group }}"
+    state: absent
+  loop: "{{ base_group_gid_conflicts_enriched }}"
+  when:
+    - base_auto_remove_unused_gid_conflict_groups | bool
+    - (item.primary_users | length) == 0
+    - (item.conflicting_group_members | length) == 0
+  loop_control:
+    label: "{{ item.conflicting_group }} (gid {{ item.requested_gid }})"
+
+- name: Re-check requested GID conflicts after remediation
+  ansible.builtin.command: "getent group {{ item.requested_gid }}"
+  register: base_group_gid_conflict_recheck
+  changed_when: false
+  failed_when: false
+  loop: "{{ base_group_gid_conflicts_enriched }}"
+  when: (base_group_gid_conflicts_enriched | length) > 0
+  loop_control:
+    label: "{{ item.requested_group }}:{{ item.requested_gid }}"
+
+- name: Build unresolved requested local group GID conflicts
+  ansible.builtin.set_fact:
+    base_group_gid_conflicts_unresolved: >-
+      {{
+        base_group_gid_conflicts_unresolved + [
+          (
+            item.item
+            | combine(
+                {
+                  'current_gid_owner': item.stdout.split(':')[0]
+                }
+              )
+          )
+        ]
+      }}
+  loop: "{{ base_group_gid_conflict_recheck.results | default([]) }}"
+  when:
+    - item.rc is defined
+    - item.rc == 0
+    - (item.stdout | trim | length) > 0
+    - ((item.stdout | trim).split(':') | length) > 0
+    - (item.stdout.split(':')[0]) != item.item.requested_group
+  loop_control:
+    label: "{{ item.item.requested_group }}:{{ item.item.requested_gid }}"
+
+- name: Enforce requested local group GID conflicts are resolved
+  ansible.builtin.assert:
+    that:
+      - (base_group_gid_conflicts_unresolved | length) == 0
+    fail_msg: >-
+      Unable to assign requested group GIDs due to existing conflicts:
+      {{ base_group_gid_conflicts_unresolved | to_nice_json }}.
+      Remove or migrate conflicting groups/users, or set a different target GID.
+
 - name: Ensure requested local groups exist
   ansible.builtin.group:
     name: "{{ item.name if item is mapping else item }}"
-    gid: "{{ item.gid if item is mapping and 'gid' in item else omit }}"
+    gid: >-
+      {{
+        item.gid
+        if (
+          item is mapping
+          and 'gid' in item
+          and (item.name | default('')) not in (base_groups_ignore_gid_for | default([]))
+        )
+        else omit
+      }}
     state: present
-  loop: "{{ base_groups }}"
+  loop: "{{ base_effective_groups }}"
+
+- name: Initialize local user UID conflict facts
+  ansible.builtin.set_fact:
+    base_user_uid_conflicts: []
+    base_user_uid_conflict_names: []
+
+- name: Compute connected usernames for UID safety checks
+  ansible.builtin.set_fact:
+    base_connected_usernames: >-
+      {{
+        [
+          ansible_user | default(''),
+          ansible_ssh_user | default(''),
+          ansible_env.SUDO_USER | default(''),
+          ansible_user_id | default('')
+        ]
+        | map('string')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+        | unique
+      }}
+
+- name: Look up existing users for requested UIDs
+  ansible.builtin.command: "getent passwd {{ item.uid }}"
+  register: base_user_existing_uid_lookup
+  changed_when: false
+  failed_when: false
+  loop: "{{ base_effective_users }}"
+  when:
+    - item is mapping
+    - item.uid is defined
+    - (item.name | default('')) not in (base_users_ignore_uid_for | default([]))
+    - not (
+        (base_skip_uid_for_connected_user | bool)
+        and ((item.name | default('')) in (base_connected_usernames | default([])))
+      )
+  loop_control:
+    label: "{{ item.name }}:{{ item.uid }}"
+
+- name: Build local user UID conflict list
+  ansible.builtin.set_fact:
+    base_user_uid_conflicts: >-
+      {{
+        base_user_uid_conflicts + [
+          {
+            'requested_user': item.item.name,
+            'requested_uid': (item.item.uid | string),
+            'conflicting_user': existing_user_fields[0]
+          }
+        ]
+      }}
+  vars:
+    existing_user_fields: "{{ item.stdout.split(':') }}"
+  loop: "{{ base_user_existing_uid_lookup.results | default([]) }}"
+  when:
+    - item.rc is defined
+    - item.rc == 0
+    - (item.stdout | trim | length) > 0
+    - ((item.stdout | trim).split(':') | length) > 0
+    - (item.stdout.split(':')[0]) != item.item.name
+  loop_control:
+    label: "{{ item.item.name }}:{{ item.item.uid }}"
+
+- name: Build local user UID conflict name list
+  ansible.builtin.set_fact:
+    base_user_uid_conflict_names: "{{ base_user_uid_conflicts | map(attribute='requested_user') | list | unique }}"
+
+- name: Report local user UID conflicts
+  ansible.builtin.debug:
+    msg: >-
+      UID conflicts detected; omitting explicit uid assignment for:
+      {{ base_user_uid_conflict_names | join(', ') }}.
+      Details={{ base_user_uid_conflicts | to_nice_json }}.
+  when:
+    - (base_user_uid_conflicts | length) > 0
+    - base_auto_omit_conflicting_user_uids | bool
+
+- name: Enforce local user UID conflicts are resolved when requested
+  ansible.builtin.assert:
+    that:
+      - (base_user_uid_conflicts | length) == 0
+    fail_msg: >-
+      Unable to assign requested user UIDs due to conflicts:
+      {{ base_user_uid_conflicts | to_nice_json }}.
+      Set base_users_ignore_uid_for or enable base_auto_omit_conflicting_user_uids.
+  when:
+    - base_fail_on_user_uid_conflicts | bool
 
 - name: Ensure baseline users exist
   ansible.builtin.user:
@@ -139,13 +488,29 @@
           else omit
         )
       }}
-    uid: "{{ item.uid | default(omit) }}"
+    uid: >-
+      {{
+        item.uid
+        if (
+          (item.uid is defined)
+          and ((item.name | default('')) not in (base_users_ignore_uid_for | default([])))
+          and not (
+            (base_skip_uid_for_connected_user | bool)
+            and ((item.name | default('')) in (base_connected_usernames | default([])))
+          )
+          and (
+            not (base_auto_omit_conflicting_user_uids | bool)
+            or ((item.name | default('')) not in (base_user_uid_conflict_names | default([])))
+          )
+        )
+        else omit
+      }}
     group: "{{ item.group | default(omit) }}"
     comment: "{{ item.comment | default(omit) }}"
     home: "{{ item.home | default(omit) }}"
     groups: "{{ item.groups | default([]) | join(',') if (item.groups | default([]) | length > 0) else omit }}"
     append: "{{ (item.groups | default([]) | length > 0) | bool }}"
-  loop: "{{ base_users + base_extra_users }}"
+  loop: "{{ base_effective_users }}"
   loop_control:
     label: "{{ item.name }}"
 
@@ -155,7 +520,7 @@
     key: "{{ item.1 }}"
     state: present
     manage_dir: true
-  loop: "{{ (base_users + base_extra_users) | subelements('authorized_keys', skip_missing=True) }}"
+  loop: "{{ base_effective_users | subelements('authorized_keys', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.name }}"
 
@@ -168,7 +533,7 @@
     validate: "/usr/sbin/visudo -cf %s"
     content: |
       {{ item.name }} ALL=(ALL) {{ 'NOPASSWD:' if item.sudo_nopasswd | default(false) else '' }}ALL
-  loop: "{{ base_users + base_extra_users }}"
+  loop: "{{ base_effective_users }}"
   loop_control:
     label: "{{ item.name }}"
   when: item.sudo | default(false)

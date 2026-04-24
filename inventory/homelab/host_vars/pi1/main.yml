@@ -32,6 +32,10 @@ log_forwarder_file_inputs:
 portainer_agent_enabled: true
 portainer_agent_project_dir: /opt/stacks/portainer-agent
 
+netdata_enabled: true
+netdata_claim_rooms: cfa21087-dee5-4064-9de6-babda1d020f7
+netdata_claim_token: "{{ docker2_netdata_claim_token }}"
+
 radarr_enabled: true
 radarr_project_name: radarr
 radarr_project_dir: /opt/stacks/radarr
@@ -83,7 +87,7 @@ lazylibrarian_books_dir: /mnt/plexLibrary
 lazylibrarian_downloads_dir: /mnt/plexStaging
 lazylibrarian_published_port: 38084
 lazylibrarian_puid: 1000
-lazylibrarian_pgid: 1000
+lazylibrarian_pgid: 100
 lazylibrarian_docker_mods: linuxserver/mods:universal-calibre|linuxserver/mods:lazylibrarian-ffmpeg
 
 app_config_backup_enabled: true
@@ -171,6 +175,9 @@ host_application_inventory:
       managed_by_ansible: true
     - name: portainer_agent
       role: portainer_agent
+      managed_by_ansible: true
+    - name: netdata
+      role: netdata
       managed_by_ansible: true
     - name: watchtower-watchtower-1
       role: watchtower

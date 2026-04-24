@@ -60,12 +60,18 @@ uptime_kuma_monitor_audit_expected_monitors:
     required_tags: ["docker1", "critical", "external"]
   - path_name: "External / Ntfy"
     required_tags: ["pi2", "important", "external"]
+    create_payload:
+      name: "Ntfy"
+      type: http
+      url: "https://ntfy.koerbcm.com"
   - path_name: "External / n8n"
     required_tags: ["docker2", "critical", "external"]
     create_payload:
       name: "n8n"
       type: http
       url: "https://n8n.koerbcm.com"
+  - path_name: "External / Invoice Ninja"
+    required_tags: ["docker2", "critical", "external"]
 
   - path_name: "Internal / Ombi"
     required_tags: ["docker1", "important", "internal"]
@@ -79,12 +85,22 @@ uptime_kuma_monitor_audit_expected_monitors:
       url: "http://docker1.kirby.lan:9000"
   - path_name: "Internal / Ntfy"
     required_tags: ["pi2", "important", "internal"]
+    create_payload:
+      name: "Ntfy"
+      type: http
+      url: "http://pi2.kirby.lan:8081"
   - path_name: "Internal / n8n"
     required_tags: ["docker2", "critical", "internal"]
     create_payload:
       name: "n8n"
       type: http
       url: "http://docker2.kirby.lan:5678"
+  - path_name: "Internal / Invoice Ninja"
+    required_tags: ["docker2", "critical", "internal"]
+    create_payload:
+      name: "Invoice Ninja"
+      type: http
+      url: "http://docker2.kirby.lan:13080"
   - path_name: "Internal / Homepage"
     required_tags: ["docker1", "important", "internal"]
     create_payload:

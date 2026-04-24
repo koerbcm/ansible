@@ -1,0 +1,77 @@
+---
+- name: Validate Uptime Kuma backup configuration
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_backup_scripts_dir | length > 0
+      - uptime_kuma_backup_root | length > 0
+      - uptime_kuma_backup_data_dir | length > 0
+      - uptime_kuma_backup_container_name | length > 0
+      - uptime_kuma_backup_on_calendar | length > 0
+      - uptime_kuma_backup_retention_days | int >= 1
+    fail_msg: >-
+      Uptime Kuma backup requires script path, backup root, data dir, container name,
+      schedule, and retention >= 1 day.
+    success_msg: "Uptime Kuma backup configuration is valid."
+  when: uptime_kuma_backup_enabled | bool
+
+- name: Ensure Uptime Kuma backup directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ uptime_kuma_backup_scripts_dir }}"
+    - "{{ uptime_kuma_backup_root }}"
+  when: uptime_kuma_backup_enabled | bool
+
+- name: Install Uptime Kuma backup script
+  ansible.builtin.template:
+    src: uptime-kuma-backup.sh.j2
+    dest: "{{ uptime_kuma_backup_scripts_dir }}/uptime-kuma-backup.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: uptime_kuma_backup_enabled | bool
+
+- name: Install Uptime Kuma backup service unit
+  ansible.builtin.template:
+    src: uptime-kuma-backup.service.j2
+    dest: /etc/systemd/system/uptime-kuma-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: uptime_kuma_backup_enabled | bool
+
+- name: Install Uptime Kuma backup timer unit
+  ansible.builtin.template:
+    src: uptime-kuma-backup.timer.j2
+    dest: /etc/systemd/system/uptime-kuma-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: uptime_kuma_backup_enabled | bool
+
+- name: Reload systemd for Uptime Kuma backup units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - uptime_kuma_backup_enabled | bool
+    - not ansible_check_mode
+
+- name: Ensure Uptime Kuma backup timer is enabled and started
+  ansible.builtin.systemd:
+    name: uptime-kuma-backup.timer
+    enabled: true
+    state: started
+  when:
+    - uptime_kuma_backup_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Uptime Kuma backup timer state checks in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping uptime-kuma-backup.timer service-state enforcement."
+  when:
+    - uptime_kuma_backup_enabled | bool
+    - ansible_check_mode

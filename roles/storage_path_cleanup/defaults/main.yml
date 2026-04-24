@@ -1,0 +1,5 @@
+---
+storage_path_cleanup_enabled: false
+storage_path_cleanup_apply: false
+storage_path_cleanup_paths: []
+storage_path_cleanup_allowed_prefix_pattern: "^(/mnt/backups/|/mnt/dockerVolumes/|/tmp/)"

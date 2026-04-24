@@ -9,6 +9,8 @@ mkdir -p "${DEST_DIR}"
 
 {% for item in app_config_backup_items %}
 if [[ -d {{ item.source | quote }} ]]; then
+  TAR_ERR_FILE="$(mktemp)"
+  set +e
   tar \
 {% for exclude in app_config_backup_excludes %}
     --exclude={{ exclude | quote }} \
@@ -18,7 +20,29 @@ if [[ -d {{ item.source | quote }} ]]; then
 {% endfor %}
     -C {{ item.source | quote }} \
     -czf "${DEST_DIR}/{{ item.name }}.tar.gz" \
-    .
+    . \
+    2>"${TAR_ERR_FILE}"
+  TAR_EXIT=$?
+  set -e
+
+  if [[ "${TAR_EXIT}" -ne 0 ]]; then
+    if [[ "${TAR_EXIT}" -eq 1 ]] \
+      && ! grep -Ev \
+        -e '^tar: \.: file changed as we read it$' \
+        -e '^tar: .*: file changed as we read it$' \
+        -e '^tar: .*: File removed before we read it$' \
+        -e '^tar: Exiting with failure status due to previous errors$' \
+        "${TAR_ERR_FILE}" >/dev/null; then
+      cat "${TAR_ERR_FILE}" >&2
+      echo "Continuing despite transient tar race warnings for {{ item.name }}." >&2
+    else
+      cat "${TAR_ERR_FILE}" >&2
+      rm -f "${TAR_ERR_FILE}"
+      exit "${TAR_EXIT}"
+    fi
+  fi
+
+  rm -f "${TAR_ERR_FILE}"
 else
   echo "Skipping missing app config source: {{ item.source }}" >&2
 fi

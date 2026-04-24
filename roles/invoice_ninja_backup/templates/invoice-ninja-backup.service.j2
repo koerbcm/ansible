@@ -1,0 +1,11 @@
+[Unit]
+Description=Invoice Ninja backup
+Requires=docker.service
+After=docker.service
+{% if homelab_failure_notify_enabled | default(false) | bool %}
+OnFailure={{ homelab_failure_notify_unit_name | default('homelab-unit-failure@') }}%n.service
+{% endif %}
+
+[Service]
+Type=oneshot
+ExecStart={{ invoice_ninja_backup_scripts_dir }}/invoice-ninja-backup.sh

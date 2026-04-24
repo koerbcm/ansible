@@ -1,6 +1,6 @@
 services:
   uptime-kuma:
-    image: louislam/uptime-kuma:2
+    image: louislam/uptime-kuma:2.2.1
     volumes:
       - /volume1/dockerVolumes/nas/uptimeKuma_data:/app/data
     ports:

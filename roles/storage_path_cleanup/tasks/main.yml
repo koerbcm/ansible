@@ -1,0 +1,89 @@
+---
+- name: Validate storage path cleanup settings
+  ansible.builtin.assert:
+    that:
+      - storage_path_cleanup_paths is iterable
+      - storage_path_cleanup_allowed_prefix_pattern | length > 0
+    fail_msg: >-
+      storage_path_cleanup_paths must be a list and
+      storage_path_cleanup_allowed_prefix_pattern must be set.
+    success_msg: "Storage path cleanup configuration is valid."
+  when: storage_path_cleanup_enabled | bool
+
+- name: Validate storage path cleanup candidates
+  ansible.builtin.assert:
+    that:
+      - item | length > 1
+      - item.startswith('/')
+      - item != '/'
+      - ((item ~ '/') | regex_search(storage_path_cleanup_allowed_prefix_pattern)) is not none
+    fail_msg: >-
+      Refusing unsafe cleanup path '{{ item }}'. Paths must be absolute and match
+      {{ storage_path_cleanup_allowed_prefix_pattern }}.
+  loop: "{{ storage_path_cleanup_paths }}"
+  when: storage_path_cleanup_enabled | bool
+
+- name: Check storage path cleanup candidates
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ storage_path_cleanup_paths }}"
+  register: storage_path_cleanup_path_stats
+  when: storage_path_cleanup_enabled | bool
+
+- name: Build storage path cleanup facts
+  ansible.builtin.set_fact:
+    storage_path_cleanup_existing_paths: >-
+      {{
+        storage_path_cleanup_path_stats.results
+        | default([])
+        | selectattr('stat.exists', 'equalto', true)
+        | map(attribute='item')
+        | list
+      }}
+    storage_path_cleanup_missing_paths: >-
+      {{
+        storage_path_cleanup_path_stats.results
+        | default([])
+        | rejectattr('stat.exists', 'equalto', true)
+        | map(attribute='item')
+        | list
+      }}
+  when: storage_path_cleanup_enabled | bool
+
+- name: Report storage path cleanup dry-run summary
+  ansible.builtin.debug:
+    msg:
+      - "Cleanup apply mode: {{ storage_path_cleanup_apply | bool }}"
+      - "Candidate paths: {{ storage_path_cleanup_paths | length }}"
+      - "Existing candidate paths: {{ storage_path_cleanup_existing_paths | default([]) | length }}"
+      - "Missing candidate paths: {{ storage_path_cleanup_missing_paths | default([]) | length }}"
+  when: storage_path_cleanup_enabled | bool
+
+- name: Report missing storage path cleanup candidates
+  ansible.builtin.debug:
+    var: storage_path_cleanup_missing_paths
+  when:
+    - storage_path_cleanup_enabled | bool
+    - (storage_path_cleanup_missing_paths | default([]) | length) > 0
+
+- name: Report removable storage path cleanup candidates
+  ansible.builtin.debug:
+    var: storage_path_cleanup_existing_paths
+  when:
+    - storage_path_cleanup_enabled | bool
+    - (storage_path_cleanup_existing_paths | default([]) | length) > 0
+
+- name: Remove approved storage path cleanup candidates
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ storage_path_cleanup_existing_paths | default([]) }}"
+  when:
+    - storage_path_cleanup_enabled | bool
+    - storage_path_cleanup_apply | bool
+    - (storage_path_cleanup_existing_paths | default([]) | length) > 0
+
+- name: Note storage path cleanup skipped on host
+  ansible.builtin.debug:
+    msg: "Storage path cleanup role is disabled on this host."
+  when: not (storage_path_cleanup_enabled | bool)

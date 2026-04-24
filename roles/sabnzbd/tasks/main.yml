@@ -41,6 +41,8 @@
     recurse: true
   become: true
   become_user: "{{ sabnzbd_permission_fix_user }}"
+  vars:
+    ansible_remote_tmp: "/tmp/.ansible-{{ sabnzbd_permission_fix_user }}/tmp"
   when:
     - sabnzbd_enabled | bool
     - sabnzbd_permission_fix_enabled | bool

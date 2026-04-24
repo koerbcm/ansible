@@ -10,6 +10,7 @@
   - `./scripts/ansible-playbook playbooks/maintenance.yml --limit docker1,docker2,pi1,pi2 --ask-become-pass`
   - `./scripts/ansible-playbook playbooks/app-updates.yml --limit docker1 --ask-become-pass`
   - `./scripts/ansible-playbook playbooks/uptime-kuma-audit.yml --limit docker1`
+  - `./scripts/ansible-playbook playbooks/uptime-kuma-backup.yml --limit pi4 --ask-become-pass`
   - `./scripts/ansible-playbook playbooks/storage-audit.yml --limit docker1,docker2,pi1,pi2 --ask-become-pass`
 - Inventory source of truth: `inventory/homelab/`
 - Compose/templates source of truth: `roles/*` + `templates/`
@@ -179,6 +180,8 @@ ANSIBLE_LOCAL_TEMP=/tmp/ansible-local ./scripts/ansible-playbook playbooks/uptim
 
 See [uptime-kuma-monitoring.md](/home/koerbcm/workspace/tools/ansiblePersonal/docs/uptime-kuma-monitoring.md)
 for taxonomy, expected monitor coverage, maintenance-scope checks, and apply mode.
+For backup and restore of local Uptime Kuma data on `pi4`, see
+[uptime-kuma-backup-restore.md](/home/koerbcm/workspace/tools/ansiblePersonal/docs/uptime-kuma-backup-restore.md).
 
 For emergency local access, you can also store a vaulted local password hash as described in
 [break-glass-access.md](/home/koerbcm/workspace/tools/ansiblePersonal/docs/break-glass-access.md).

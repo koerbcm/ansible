@@ -17,6 +17,10 @@ common_service_units:
     enabled: false
     state: stopped
 
+common_service_fail_on_missing_units: true
+common_service_known_absent_units: []
+common_service_enforce_missing_in_check_mode: false
+
 common_journald_enabled: true
 common_journald_settings:
   SystemMaxUse: 200M

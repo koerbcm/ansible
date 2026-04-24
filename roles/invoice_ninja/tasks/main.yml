@@ -1,0 +1,171 @@
+---
+- name: Validate Invoice Ninja configuration
+  ansible.builtin.assert:
+    that:
+      - invoice_ninja_project_name | length > 0
+      - invoice_ninja_project_dir | length > 0
+      - invoice_ninja_compose_file | length > 0
+      - invoice_ninja_env_file | length > 0
+      - invoice_ninja_nginx_conf_dir | length > 0
+      - invoice_ninja_nginx_conf_file | length > 0
+      - invoice_ninja_app_image | length > 0
+      - invoice_ninja_app_service_name | length > 0
+      - invoice_ninja_app_container_name | length > 0
+      - invoice_ninja_app_listen_port | int > 0
+      - invoice_ninja_web_image | length > 0
+      - invoice_ninja_web_service_name | length > 0
+      - invoice_ninja_web_container_name | length > 0
+      - invoice_ninja_web_published_port | int > 0
+      - invoice_ninja_db_image | length > 0
+      - invoice_ninja_db_service_name | length > 0
+      - invoice_ninja_db_container_name | length > 0
+      - invoice_ninja_db_root_password | length > 0
+      - invoice_ninja_db_database | length > 0
+      - invoice_ninja_db_user | length > 0
+      - invoice_ninja_db_password | length > 0
+      - invoice_ninja_redis_image | length > 0
+      - invoice_ninja_redis_service_name | length > 0
+      - invoice_ninja_redis_container_name | length > 0
+      - invoice_ninja_app_url | length > 0
+      - invoice_ninja_app_key | length > 0
+      - invoice_ninja_initial_user_email | length > 0
+      - invoice_ninja_initial_user_password | length > 0
+      - invoice_ninja_data_public_dir | length > 0
+      - invoice_ninja_data_storage_dir | length > 0
+      - invoice_ninja_data_mysql_dir | length > 0
+      - invoice_ninja_data_redis_dir | length > 0
+    fail_msg: >-
+      Invoice Ninja requires project settings, app/database credentials, admin bootstrap
+      credentials, and local data paths.
+    success_msg: "Invoice Ninja configuration is valid."
+  when: invoice_ninja_enabled | bool
+
+- name: Guard against network-backed Invoice Ninja data paths
+  ansible.builtin.assert:
+    that:
+      - invoice_ninja_allow_network_data_dir | bool or not (item is match("^/mnt/dockerVolumes/"))
+    fail_msg: >-
+      Invoice Ninja data path {{ item }} points to /mnt/dockerVolumes (network-backed in this repo).
+      Keep Invoice Ninja state on local disk (for example /srv/invoice-ninja/*), or set
+      invoice_ninja_allow_network_data_dir=true only if you explicitly accept the risk.
+    success_msg: "Invoice Ninja data path {{ item }} is local-host compatible."
+  loop:
+    - "{{ invoice_ninja_data_public_dir }}"
+    - "{{ invoice_ninja_data_storage_dir }}"
+    - "{{ invoice_ninja_data_mysql_dir }}"
+    - "{{ invoice_ninja_data_redis_dir }}"
+  when: invoice_ninja_enabled | bool
+
+- name: Ensure Invoice Ninja project directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ invoice_ninja_project_dir }}"
+    - "{{ invoice_ninja_nginx_conf_dir }}"
+  when: invoice_ninja_enabled | bool
+
+- name: Validate Invoice Ninja managed host paths
+  ansible.builtin.assert:
+    that:
+      - item.path | length > 0
+      - item.owner is defined
+      - item.group is defined
+    fail_msg: "Each Invoice Ninja managed host path needs path, owner, and group."
+  loop: "{{ invoice_ninja_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: invoice_ninja_enabled | bool
+
+- name: Ensure Invoice Ninja managed host paths exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop: "{{ invoice_ninja_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: invoice_ninja_enabled | bool
+
+- name: Ensure Invoice Ninja managed host path ownership is recursive
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    recurse: true
+  loop: "{{ invoice_ninja_managed_host_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - invoice_ninja_enabled | bool
+    - item.recurse_owner_group | default(false)
+
+- name: Render Invoice Ninja compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/invoice-ninja.compose.yml.j2"
+    dest: "{{ invoice_ninja_project_dir }}/{{ invoice_ninja_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: invoice_ninja_enabled | bool
+
+- name: Render Invoice Ninja environment file
+  ansible.builtin.template:
+    src: invoice-ninja.env.j2
+    dest: "{{ invoice_ninja_project_dir }}/{{ invoice_ninja_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: invoice_ninja_enabled | bool
+
+- name: Render Invoice Ninja nginx config
+  ansible.builtin.template:
+    src: invoice-ninja.nginx.conf.j2
+    dest: "{{ invoice_ninja_nginx_conf_dir }}/{{ invoice_ninja_nginx_conf_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: invoice_ninja_enabled | bool
+
+- name: Deploy Invoice Ninja with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ invoice_ninja_project_name }}"
+    project_src: "{{ invoice_ninja_project_dir }}"
+    files:
+      - "{{ invoice_ninja_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: invoice_ninja_compose_result
+  when:
+    - invoice_ninja_enabled | bool
+    - invoice_ninja_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Show Invoice Ninja compose actions
+  ansible.builtin.debug:
+    var: invoice_ninja_compose_result.actions
+  when:
+    - invoice_ninja_enabled | bool
+    - invoice_ninja_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Note Invoice Ninja render-only mode
+  ansible.builtin.debug:
+    msg: "Invoice Ninja compose, env, and nginx config were rendered, but runtime management is disabled."
+  when:
+    - invoice_ninja_enabled | bool
+    - not (invoice_ninja_manage_runtime | bool)
+
+- name: Skip Invoice Ninja compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Invoice Ninja docker compose deployment."
+  when:
+    - invoice_ninja_enabled | bool
+    - invoice_ninja_manage_runtime | bool
+    - ansible_check_mode

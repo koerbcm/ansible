@@ -10,12 +10,18 @@ docker_packages:
   - containerd.io
   - docker-buildx-plugin
   - docker-compose-plugin
+docker_packages_fallback:
+  - docker.io
+  - docker-buildx
+  - docker-compose
 
 docker_apt_arch_map:
   x86_64: amd64
   aarch64: arm64
   armv7l: armhf
   armv6l: armhf
+
+docker_use_fallback_packages: false
 
 docker_admin_users: []
 docker_dns_servers: []

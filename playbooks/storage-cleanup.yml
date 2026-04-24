@@ -8,3 +8,7 @@
       tags:
         - storage-cleanup
         - cleanup
+    - role: storage_path_cleanup
+      tags:
+        - storage-cleanup
+        - cleanup

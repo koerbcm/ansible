@@ -14,6 +14,7 @@
     app_update_ignore_restarting_containers: []
     app_update_role_list:
       - ntfy
+      - uptime_kuma
       - radarr
       - sonarr
       - sabnzbd
@@ -25,6 +26,7 @@
       - ombi
       - it_tools
       - n8n
+      - invoice_ninja
       - portainer
       - nextcloud
       - paperless

@@ -34,3 +34,13 @@ identity_client_responder_socket_units:
   - sssd-nss.socket
   - sssd-pam.socket
   - sssd-pam-priv.socket
+
+# Some Debian-family builds can ship responder helpers with incorrect
+# ownership/mode, which prevents SSSD from launching critical responders.
+# Keep this enabled so runs self-heal packaged permission drift.
+identity_client_fix_packaged_responder_permissions: true
+identity_client_packaged_responder_permission_fixes:
+  - path: /usr/libexec/sssd/sssd_pam
+    owner: root
+    group: root
+    mode: "0755"

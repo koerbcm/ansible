@@ -1,0 +1,10 @@
+---
+- name: Uptime Kuma backup jobs
+  hosts: uptime_kuma_backup_hosts
+  become: true
+  gather_facts: false
+  roles:
+    - role: uptime_kuma_backup
+      tags:
+        - uptime-kuma-backup
+        - backup

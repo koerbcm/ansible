@@ -10,6 +10,23 @@ The migration pattern is moving important live state to local disk and using the
 - Confirm every important local primary dataset has a tested backup path.
 - Remove or archive stale Docker volumes only after the replacement service has been stable and backups have been verified.
 - Reclaim unused host disk and NAS space from retired containers, old images, and abandoned NFS-backed volumes.
+- Keep routine maintenance from accumulating stale Docker artifacts long-term.
+
+## Automated Housekeeping
+
+`playbooks/maintenance.yml` now includes the `storage_housekeeping` role with conservative defaults:
+
+- prune stopped containers older than `168h`
+- prune dangling Docker images
+- prune old Docker builder cache
+- vacuum journal logs to `30d`
+- run `systemd-tmpfiles --clean`
+
+Safety defaults:
+
+- disabled by variable only if needed (`storage_housekeeping_enabled`)
+- broad deletes remain off by default (`storage_housekeeping_prune_unused_images`, `storage_housekeeping_prune_networks`, `storage_housekeeping_prune_volumes`)
+- use `storage_housekeeping_apply=false` for a non-destructive audit run
 
 ## Known Items
 

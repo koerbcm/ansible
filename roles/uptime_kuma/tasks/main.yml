@@ -1,0 +1,218 @@
+---
+- name: Validate Uptime Kuma configuration
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_project_dir | length > 0
+      - uptime_kuma_compose_file | length > 0
+      - uptime_kuma_image | length > 0
+      - uptime_kuma_container_name | length > 0
+      - uptime_kuma_service_name | length > 0
+      - uptime_kuma_data_dir | length > 0
+      - uptime_kuma_published_port | int > 0
+      - uptime_kuma_container_port | int > 0
+    fail_msg: "Uptime Kuma requires project settings, image, container identity, data path, and published/container ports."
+    success_msg: "Uptime Kuma configuration is valid."
+  when: uptime_kuma_enabled | bool
+
+- name: Build Uptime Kuma environment
+  ansible.builtin.set_fact:
+    uptime_kuma_environment: >-
+      {{
+        {
+          'TZ': timezone
+        } | combine(uptime_kuma_environment_extra)
+      }}
+  when: uptime_kuma_enabled | bool
+
+- name: Guard against using NFS-backed Docker volume path for Uptime Kuma SQLite data
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_allow_network_data_dir | bool or not (uptime_kuma_data_dir is match("^/mnt/dockerVolumes/"))
+    fail_msg: >-
+      uptime_kuma_data_dir points to {{ uptime_kuma_data_dir }}, which is a network-backed mount in this repo.
+      Keep SQLite on local disk (for example /srv/uptime-kuma/data), or set
+      uptime_kuma_allow_network_data_dir=true only if you explicitly accept lock/timeout risk.
+    success_msg: "Uptime Kuma data directory path is acceptable for SQLite."
+  when: uptime_kuma_enabled | bool
+
+- name: Ensure Uptime Kuma project directory exists
+  ansible.builtin.file:
+    path: "{{ uptime_kuma_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: uptime_kuma_enabled | bool
+
+- name: Ensure Uptime Kuma data directory exists
+  ansible.builtin.file:
+    path: "{{ uptime_kuma_data_dir }}"
+    state: directory
+    mode: "{{ uptime_kuma_data_dir_mode }}"
+  when: uptime_kuma_enabled | bool
+
+- name: Check Uptime Kuma data migration source directory
+  ansible.builtin.stat:
+    path: "{{ uptime_kuma_data_migration_source_dir }}"
+  register: uptime_kuma_data_migration_source_stat
+  when:
+    - uptime_kuma_enabled | bool
+    - uptime_kuma_data_migration_enabled | bool
+    - uptime_kuma_data_migration_source_dir | length > 0
+
+- name: Check whether Uptime Kuma destination database already exists
+  ansible.builtin.stat:
+    path: "{{ uptime_kuma_data_dir }}/kuma.db"
+  register: uptime_kuma_data_migration_destination_db_stat
+  when:
+    - uptime_kuma_enabled | bool
+    - uptime_kuma_data_migration_enabled | bool
+
+- name: Determine whether Uptime Kuma data migration should run
+  ansible.builtin.set_fact:
+    uptime_kuma_data_migration_should_run: >-
+      {{
+        (uptime_kuma_data_migration_source_stat.stat.exists | default(false))
+        and
+        (uptime_kuma_data_migration_source_stat.stat.isdir | default(false))
+        and
+        (uptime_kuma_data_migration_source_dir != uptime_kuma_data_dir)
+        and
+        (
+          (
+            not (uptime_kuma_data_migration_only_when_destination_db_missing | bool)
+          )
+          or
+          (
+            not (uptime_kuma_data_migration_destination_db_stat.stat.exists | default(false))
+          )
+        )
+      }}
+  when:
+    - uptime_kuma_enabled | bool
+    - uptime_kuma_data_migration_enabled | bool
+
+- name: Note Uptime Kuma data migration in check mode
+  ansible.builtin.debug:
+    msg: >-
+      Check mode enabled, Uptime Kuma data migration would copy
+      {{ uptime_kuma_data_migration_source_dir }} -> {{ uptime_kuma_data_dir }}.
+  when:
+    - uptime_kuma_enabled | bool
+    - uptime_kuma_data_migration_enabled | bool
+    - ansible_check_mode
+    - uptime_kuma_data_migration_should_run | default(false)
+
+- name: Copy Uptime Kuma data from migration source
+  ansible.builtin.command:
+    argv:
+      - cp
+      - -a
+      - "{{ uptime_kuma_data_migration_source_dir }}/."
+      - "{{ uptime_kuma_data_dir }}/"
+  register: uptime_kuma_data_migration_copy
+  changed_when: true
+  when:
+    - uptime_kuma_enabled | bool
+    - uptime_kuma_data_migration_enabled | bool
+    - not ansible_check_mode
+    - uptime_kuma_data_migration_should_run | default(false)
+
+- name: Ensure Uptime Kuma data directory ownership
+  ansible.builtin.file:
+    path: "{{ uptime_kuma_data_dir }}"
+    state: directory
+    owner: "{{ uptime_kuma_data_dir_owner }}"
+    group: "{{ uptime_kuma_data_dir_group }}"
+  when:
+    - uptime_kuma_enabled | bool
+    - not ansible_check_mode
+
+- name: Ensure Uptime Kuma migrated data ownership
+  ansible.builtin.file:
+    path: "{{ uptime_kuma_data_dir }}"
+    state: directory
+    owner: "{{ uptime_kuma_data_dir_owner }}"
+    group: "{{ uptime_kuma_data_dir_group }}"
+    recurse: true
+  when:
+    - uptime_kuma_enabled | bool
+    - not ansible_check_mode
+    - uptime_kuma_data_migration_copy is defined
+    - uptime_kuma_data_migration_copy.changed
+
+- name: Render Uptime Kuma compose project
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/uptime-kuma.compose.yml.j2"
+    dest: "{{ uptime_kuma_project_dir }}/{{ uptime_kuma_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: uptime_kuma_enabled | bool
+
+- name: Inspect existing Uptime Kuma container
+  community.docker.docker_container_info:
+    name: "{{ uptime_kuma_container_name }}"
+  register: uptime_kuma_existing_container
+  when: uptime_kuma_enabled | bool
+
+- name: Determine whether Uptime Kuma needs one-time compose adoption
+  ansible.builtin.set_fact:
+    uptime_kuma_needs_adoption: >-
+      {{
+        (uptime_kuma_existing_container.exists | default(false))
+        and
+        (
+          ((uptime_kuma_existing_container.container.Config.Labels | default({})).get('com.docker.compose.project', ''))
+          != uptime_kuma_project_name
+          or
+          ((uptime_kuma_existing_container.container.Config.Labels | default({})).get('com.docker.compose.service', ''))
+          != uptime_kuma_service_name
+        )
+      }}
+  when: uptime_kuma_enabled | bool
+
+- name: Note Uptime Kuma one-time compose adoption in check mode
+  ansible.builtin.debug:
+    msg: "Existing standalone Uptime Kuma container would be replaced so the service can be managed by Docker Compose."
+  when:
+    - uptime_kuma_enabled | bool
+    - ansible_check_mode
+    - uptime_kuma_needs_adoption | default(false)
+
+- name: Remove pre-existing standalone Uptime Kuma container
+  community.docker.docker_container:
+    name: "{{ uptime_kuma_container_name }}"
+    state: absent
+    force_kill: true
+  when:
+    - uptime_kuma_enabled | bool
+    - not ansible_check_mode
+    - uptime_kuma_needs_adoption | default(false)
+
+- name: Deploy Uptime Kuma with Docker Compose
+  community.docker.docker_compose_v2:
+    project_name: "{{ uptime_kuma_project_name }}"
+    project_src: "{{ uptime_kuma_project_dir }}"
+    files:
+      - "{{ uptime_kuma_compose_file }}"
+    state: present
+    pull: "{{ docker_compose_pull_policy | default(omit) }}"
+  register: uptime_kuma_compose_result
+  when:
+    - uptime_kuma_enabled | bool
+    - not ansible_check_mode
+
+- name: Show Uptime Kuma compose actions
+  ansible.builtin.debug:
+    var: uptime_kuma_compose_result.actions
+  when:
+    - uptime_kuma_enabled | bool
+    - not ansible_check_mode
+
+- name: Skip Uptime Kuma compose deployment in check mode
+  ansible.builtin.debug:
+    msg: "Check mode enabled, skipping Uptime Kuma docker compose deployment."
+  when:
+    - uptime_kuma_enabled | bool
+    - ansible_check_mode

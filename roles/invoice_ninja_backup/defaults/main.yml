@@ -1,0 +1,15 @@
+---
+invoice_ninja_backup_enabled: false
+
+invoice_ninja_backup_scripts_dir: /usr/local/bin
+invoice_ninja_backup_root: /mnt/backups/invoice-ninja
+invoice_ninja_backup_db_container_name: "{{ invoice_ninja_db_container_name | default('invoice-ninja-db-local') }}"
+invoice_ninja_backup_db_name: "{{ invoice_ninja_db_database | default('invoice_ninja') }}"
+invoice_ninja_backup_data_public_dir: "{{ invoice_ninja_data_public_dir | default('/srv/invoice-ninja/app_public') }}"
+invoice_ninja_backup_data_storage_dir: "{{ invoice_ninja_data_storage_dir | default('/srv/invoice-ninja/app_storage') }}"
+invoice_ninja_backup_data_redis_dir: "{{ invoice_ninja_data_redis_dir | default('/srv/invoice-ninja/redis_data') }}"
+invoice_ninja_backup_project_dir: "{{ invoice_ninja_project_dir | default('/opt/stacks/invoice-ninja') }}"
+invoice_ninja_backup_env_file: "{{ invoice_ninja_env_file | default('.env') }}"
+invoice_ninja_backup_compose_file: "{{ invoice_ninja_compose_file | default('compose.yml') }}"
+invoice_ninja_backup_retention_days: 60
+invoice_ninja_backup_on_calendar: "*-*-* 01:55:00"

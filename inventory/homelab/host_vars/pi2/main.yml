@@ -2,8 +2,6 @@
 # Pi 5 cutover completed on 2026-04-13.
 # `pi-bootstrap` was a temporary bootstrap admin and should remain absent.
 
-base_extra_users: []
-
 nfs_mounts:
   - path: /mnt/dockerVolumes
     src: 10.27.27.9:/volume1/dockerVolumes
@@ -33,6 +31,24 @@ ntfy_environment_extra:
   NTFY_BEHIND_PROXY: "true"
   NTFY_ENABLE_LOGIN: "true"
 
+# Uptime Kuma was migrated to pi4 and is intentionally disabled on pi2.
+uptime_kuma_enabled: false
+
+# Cutover cleanup (dry-run by default). Apply with:
+# ./scripts/ansible-playbook playbooks/storage-cleanup.yml --limit pi2 -e storage_path_cleanup_apply=true --ask-become-pass
+storage_cleanup_enabled: true
+storage_cleanup_apply: false
+storage_cleanup_container_candidates:
+  - uptime-kuma
+storage_path_cleanup_enabled: true
+storage_path_cleanup_apply: false
+storage_path_cleanup_allowed_prefix_pattern: "^(/mnt/backups/|/mnt/dockerVolumes/|/tmp/|/srv/uptime-kuma(/|$)|/opt/stacks/uptime-kuma(/|$))"
+storage_path_cleanup_paths:
+  - /mnt/backups/pi2/uptime-kuma/cutover
+  - /mnt/dockerVolumes/pi2/uptimeKuma_data
+  - /srv/uptime-kuma
+  - /opt/stacks/uptime-kuma
+
 maintenance_pre_backup_services: []
 
 legacy_cleanup_enabled: true
@@ -54,6 +70,10 @@ legacy_cleanup_users:
 portainer_agent_enabled: true
 portainer_agent_project_dir: /opt/stacks/portainer-agent
 
+netdata_enabled: true
+netdata_claim_rooms: cfa21087-dee5-4064-9de6-babda1d020f7
+netdata_claim_token: "{{ docker2_netdata_claim_token }}"
+
 host_application_inventory:
   docker:
     - name: ntfy
@@ -61,6 +81,9 @@ host_application_inventory:
       managed_by_ansible: true
     - name: portainer_agent
       role: portainer_agent
+      managed_by_ansible: true
+    - name: netdata
+      role: netdata
       managed_by_ansible: true
   legacy_host_services:
     - radarr

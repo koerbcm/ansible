@@ -1,0 +1,70 @@
+---
+- name: Validate Invoice Ninja backup configuration
+  ansible.builtin.assert:
+    that:
+      - invoice_ninja_backup_scripts_dir | length > 0
+      - invoice_ninja_backup_root | length > 0
+      - invoice_ninja_backup_db_container_name | length > 0
+      - invoice_ninja_backup_db_name | length > 0
+      - invoice_ninja_backup_data_public_dir | length > 0
+      - invoice_ninja_backup_data_storage_dir | length > 0
+      - invoice_ninja_backup_project_dir | length > 0
+      - invoice_ninja_backup_env_file | length > 0
+      - invoice_ninja_backup_compose_file | length > 0
+      - invoice_ninja_backup_on_calendar | length > 0
+    fail_msg: >-
+      Invoice Ninja backup requires script path, backup root, db container/database,
+      local data paths, project paths, and schedule.
+    success_msg: "Invoice Ninja backup configuration is valid."
+  when: invoice_ninja_backup_enabled | bool
+
+- name: Ensure Invoice Ninja backup directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ invoice_ninja_backup_scripts_dir }}"
+    - "{{ invoice_ninja_backup_root }}"
+  when: invoice_ninja_backup_enabled | bool
+
+- name: Install Invoice Ninja backup script
+  ansible.builtin.template:
+    src: invoice-ninja-backup.sh.j2
+    dest: "{{ invoice_ninja_backup_scripts_dir }}/invoice-ninja-backup.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: invoice_ninja_backup_enabled | bool
+
+- name: Install Invoice Ninja backup service unit
+  ansible.builtin.template:
+    src: invoice-ninja-backup.service.j2
+    dest: /etc/systemd/system/invoice-ninja-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: invoice_ninja_backup_enabled | bool
+
+- name: Install Invoice Ninja backup timer unit
+  ansible.builtin.template:
+    src: invoice-ninja-backup.timer.j2
+    dest: /etc/systemd/system/invoice-ninja-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: invoice_ninja_backup_enabled | bool
+
+- name: Reload systemd for Invoice Ninja backup units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: invoice_ninja_backup_enabled | bool
+
+- name: Ensure Invoice Ninja backup timer is enabled and started
+  ansible.builtin.systemd:
+    name: invoice-ninja-backup.timer
+    enabled: true
+    state: started
+  when: invoice_ninja_backup_enabled | bool

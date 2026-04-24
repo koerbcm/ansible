@@ -49,6 +49,19 @@
             - maintenance
             - os-updates
 
+        - name: Run storage housekeeping
+          ansible.builtin.include_role:
+            name: storage_housekeeping
+            apply:
+              tags:
+                - maintenance
+                - cleanup
+                - storage-housekeeping
+          tags:
+            - maintenance
+            - cleanup
+            - storage-housekeeping
+
       always:
         - name: End Uptime Kuma maintenance window
           ansible.builtin.include_role:

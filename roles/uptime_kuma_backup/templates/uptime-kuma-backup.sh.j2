@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="{{ uptime_kuma_backup_root }}"
+DATA_DIR="{{ uptime_kuma_backup_data_dir }}"
+PROJECT_DIR="{{ uptime_kuma_backup_project_dir }}"
+KUMA_CONTAINER="{{ uptime_kuma_backup_container_name }}"
+RETENTION_DAYS="{{ uptime_kuma_backup_retention_days }}"
+STOP_CONTAINER="{{ (uptime_kuma_backup_stop_container | bool) | ternary('true', 'false') }}"
+INCLUDE_PROJECT_FILES="{{ (uptime_kuma_backup_include_project_files | bool) | ternary('true', 'false') }}"
+TIMESTAMP="$(date +%F-%H%M%S)"
+DEST_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
+CONTAINER_WAS_RUNNING=0
+
+if [ ! -d "${DATA_DIR}" ]; then
+  echo "Uptime Kuma data dir does not exist: ${DATA_DIR}" >&2
+  exit 1
+fi
+
+mkdir -p "${DEST_DIR}"
+
+if [ "${STOP_CONTAINER}" = "true" ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker command not found but uptime_kuma_backup_stop_container=true" >&2
+    exit 1
+  fi
+
+  if docker ps --format '{{ "{{.Names}}" }}' | grep -Fxq "${KUMA_CONTAINER}"; then
+    CONTAINER_WAS_RUNNING=1
+    docker stop "${KUMA_CONTAINER}" >/dev/null
+  fi
+fi
+
+cleanup() {
+  if [ "${CONTAINER_WAS_RUNNING}" -eq 1 ]; then
+    docker start "${KUMA_CONTAINER}" >/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+tar -C "${DATA_DIR}" -czf "${DEST_DIR}/uptime-kuma-data.tar.gz" .
+
+if [ "${INCLUDE_PROJECT_FILES}" = "true" ] && [ -d "${PROJECT_DIR}" ]; then
+  tar -C "${PROJECT_DIR}" -czf "${DEST_DIR}/uptime-kuma-project.tar.gz" .
+fi
+
+cat > "${DEST_DIR}/backup-meta.txt" <<EOF
+timestamp=${TIMESTAMP}
+hostname=$(hostname -s)
+data_dir=${DATA_DIR}
+project_dir=${PROJECT_DIR}
+container=${KUMA_CONTAINER}
+stop_container=${STOP_CONTAINER}
+EOF
+
+if command -v sha256sum >/dev/null 2>&1; then
+  (
+    cd "${DEST_DIR}"
+    sha256sum ./*.tar.gz > SHA256SUMS
+  )
+fi
+
+find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +"${RETENTION_DAYS}" -exec rm -rf {} +

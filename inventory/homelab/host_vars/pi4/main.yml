@@ -1,0 +1,42 @@
+---
+# Reprovisioned legacy Raspberry Pi host.
+# Uptime Kuma is being cut over here from pi2.
+
+base_hostname_manage: true
+base_hostname: pi4
+base_hostname_aliases:
+  - monitor
+
+uptime_kuma_enabled: true
+uptime_kuma_project_name: uptime-kuma
+uptime_kuma_project_dir: /opt/stacks/uptime-kuma
+uptime_kuma_image: louislam/uptime-kuma:2.2.1
+uptime_kuma_container_name: uptime-kuma
+uptime_kuma_service_name: uptime-kuma
+uptime_kuma_data_dir: /srv/uptime-kuma/data
+uptime_kuma_data_migration_enabled: false
+uptime_kuma_published_port: 9000
+
+uptime_kuma_backup_enabled: true
+uptime_kuma_backup_root: /mnt/backups/pi4/uptime-kuma
+uptime_kuma_backup_on_calendar: "*-*-* 01:20:00"
+uptime_kuma_backup_retention_days: 60
+uptime_kuma_backup_stop_container: true
+uptime_kuma_backup_include_project_files: true
+
+netdata_enabled: true
+netdata_claim_rooms: cfa21087-dee5-4064-9de6-babda1d020f7
+netdata_claim_token: "{{ docker2_netdata_claim_token }}"
+
+maintenance_pre_backup_services:
+  - uptime-kuma-backup.service
+
+host_application_inventory:
+  docker:
+    - name: uptime-kuma
+      role: uptime_kuma
+      managed_by_ansible: true
+    - name: netdata
+      role: netdata
+      managed_by_ansible: true
+  legacy_host_services: []

@@ -6,6 +6,78 @@
     update_cache: true
   when: ansible_os_family == "Debian"
 
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Compute common service availability
+  ansible.builtin.set_fact:
+    common_service_units_present: "{{ common_service_units_present | default({}) | combine({ item.name: unit_present }) }}"
+    common_service_missing_units: "{{ common_service_missing_units | default([]) + (unit_present | ternary([], [item.name])) }}"
+  vars:
+    unit_present: >-
+      {{
+        (item.name in ansible_facts.services)
+        or
+        ((item.name ~ '.service') in ansible_facts.services)
+      }}
+  loop: "{{ common_service_units }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Compute expected and unexpected missing common services
+  ansible.builtin.set_fact:
+    common_service_missing_units_unique: "{{ common_service_missing_units | default([]) | unique }}"
+    common_service_unexpected_missing_units: >-
+      {{
+        (common_service_missing_units | default([]) | unique)
+        | difference(common_service_known_absent_units | default([]))
+      }}
+
+- name: Report known-absent common services
+  ansible.builtin.debug:
+    msg: >-
+      Skipping known-absent services on {{ inventory_hostname }}:
+      {{
+        (common_service_missing_units_unique | default([]))
+        | intersect(common_service_known_absent_units | default([]))
+        | join(', ')
+      }}
+  when: >-
+    (
+      (common_service_missing_units_unique | default([]))
+      | intersect(common_service_known_absent_units | default([]))
+      | length
+    ) > 0
+
+- name: Report unexpected missing common services
+  ansible.builtin.debug:
+    msg: "Unexpected missing services on {{ inventory_hostname }}: {{ common_service_unexpected_missing_units | join(', ') }}"
+  when: (common_service_unexpected_missing_units | default([]) | length) > 0
+
+- name: Note strict common service enforcement is deferred in check mode
+  ansible.builtin.debug:
+    msg: >-
+      Check mode detected; strict missing-service enforcement is deferred until
+      apply mode. Missing services on {{ inventory_hostname }}:
+      {{ common_service_unexpected_missing_units | default([]) | join(', ') }}.
+  when:
+    - ansible_check_mode
+    - common_service_fail_on_missing_units | bool
+    - not (common_service_enforce_missing_in_check_mode | bool)
+    - (common_service_unexpected_missing_units | default([]) | length) > 0
+
+- name: Enforce common service presence when requested
+  ansible.builtin.assert:
+    that:
+      - (common_service_unexpected_missing_units | default([]) | length) == 0
+    fail_msg: >-
+      Missing required services on {{ inventory_hostname }}:
+      {{ common_service_unexpected_missing_units | default([]) | join(', ') }}.
+      Known-absent allowlist={{ common_service_known_absent_units | default([]) | join(', ') }}.
+  when:
+    - common_service_fail_on_missing_units | bool
+    - not ansible_check_mode or common_service_enforce_missing_in_check_mode | bool
+
 - name: Ensure common services are in the desired state
   ansible.builtin.systemd_service:
     name: "{{ item.name }}"
@@ -14,7 +86,9 @@
   loop: "{{ common_service_units }}"
   loop_control:
     label: "{{ item.name }}"
-  when: not (ansible_check_mode and item.name == 'ufw')
+  when:
+    - common_service_units_present[item.name] | default(false)
+    - not (ansible_check_mode and item.name == 'ufw')
 
 - name: Skip ufw service state validation in check mode
   ansible.builtin.debug:

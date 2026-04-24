@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_ROOT="{{ invoice_ninja_backup_root }}"
+DB_CONTAINER="{{ invoice_ninja_backup_db_container_name }}"
+PUBLIC_DIR="{{ invoice_ninja_backup_data_public_dir }}"
+STORAGE_DIR="{{ invoice_ninja_backup_data_storage_dir }}"
+REDIS_DIR="{{ invoice_ninja_backup_data_redis_dir }}"
+PROJECT_DIR="{{ invoice_ninja_backup_project_dir }}"
+ENV_FILE="{{ invoice_ninja_backup_env_file }}"
+COMPOSE_FILE="{{ invoice_ninja_backup_compose_file }}"
+DEST_DIR="${BACKUP_ROOT}/$(date +%F-%H%M%S)"
+
+mkdir -p "${DEST_DIR}"
+
+docker exec "${DB_CONTAINER}" sh -lc \
+  'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --databases "$MYSQL_DATABASE" --single-transaction --routines --events --triggers --hex-blob' \
+  | gzip > "${DEST_DIR}/invoice-ninja-db.sql.gz"
+
+tar -C "${STORAGE_DIR}" -czf "${DEST_DIR}/invoice-ninja-storage.tar.gz" .
+tar -C "${PUBLIC_DIR}" -czf "${DEST_DIR}/invoice-ninja-public.tar.gz" .
+
+if [ -d "${REDIS_DIR}" ]; then
+  tar -C "${REDIS_DIR}" -czf "${DEST_DIR}/invoice-ninja-redis.tar.gz" .
+fi
+
+if [ -f "${PROJECT_DIR}/${COMPOSE_FILE}" ]; then
+  cp -a "${PROJECT_DIR}/${COMPOSE_FILE}" "${DEST_DIR}/"
+fi
+
+if [ -f "${PROJECT_DIR}/${ENV_FILE}" ]; then
+  cp -a "${PROJECT_DIR}/${ENV_FILE}" "${DEST_DIR}/"
+fi
+
+find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ invoice_ninja_backup_retention_days }} -exec rm -rf {} +

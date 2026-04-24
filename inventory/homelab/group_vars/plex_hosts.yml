@@ -1,0 +1,16 @@
+---
+# Any host running Plex must provide the local service account expected
+# by media workflows and mounted storage ACLs.
+base_additional_groups:
+  - name: users
+    gid: 100
+
+base_additional_users:
+  - name: plex
+    uid: 1027
+    group: users
+    comment: Plex service account
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+    create_home: false
+    password: "!"

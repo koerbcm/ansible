@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule Uptime Kuma backups
+
+[Timer]
+OnCalendar={{ uptime_kuma_backup_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
