@@ -1,0 +1,17 @@
+# Host-specific override of stock `inbound_packets_dropped_ratio` for `net_drops.eth0`.
+# Stock source: netdata/netdata `src/health/health.d/net.conf`.
+alarm: inbound_packets_dropped_ratio
+   on: net_drops.eth0
+class: Errors
+type: System
+component: Network
+lookup: sum -10m unaligned absolute of inbound
+calc: (($net_interface_inbound_packets > 10000) ? ($this * 100 / $net_interface_inbound_packets) : (0))
+units: %
+every: 1m
+warn: $this >= {{ netdata_inbound_packets_dropped_ratio_eth0_warning }}
+crit: $this >= {{ netdata_inbound_packets_dropped_ratio_eth0_critical }}
+delay: up 1m down 1h multiplier 1.5 max 2h
+summary: System network interface ${label:device} inbound drops
+info: Ratio of inbound dropped packets for the network interface ${label:device} over the last 10 minutes
+to: silent

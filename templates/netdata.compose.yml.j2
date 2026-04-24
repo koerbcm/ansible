@@ -20,6 +20,9 @@ services:
     restart: unless-stopped
     volumes:
       - {{ netdata_config_volume_name | quote }}:/etc/netdata
+{% if netdata_inbound_packets_dropped_ratio_eth0_override_enabled | bool %}
+      - {{ (netdata_inbound_packets_dropped_ratio_eth0_override_dir ~ '/' ~ netdata_inbound_packets_dropped_ratio_eth0_override_file) | quote }}:/etc/netdata/health.d/{{ netdata_inbound_packets_dropped_ratio_eth0_override_file }}:ro
+{% endif %}
       - {{ netdata_cache_volume_name | quote }}:/var/cache/netdata
       - {{ netdata_lib_volume_name | quote }}:/var/lib/netdata
       - /etc/passwd:/host/etc/passwd:ro

@@ -13,3 +13,8 @@ netdata_claim_token: ""
 netdata_config_volume_name: netdata_netdataconfig
 netdata_cache_volume_name: netdata_netdatacache
 netdata_lib_volume_name: netdata_netdatalib
+netdata_inbound_packets_dropped_ratio_eth0_override_enabled: false
+netdata_inbound_packets_dropped_ratio_eth0_override_dir: "{{ netdata_project_dir }}/health.d"
+netdata_inbound_packets_dropped_ratio_eth0_override_file: inbound-packets-dropped-ratio-eth0.conf
+netdata_inbound_packets_dropped_ratio_eth0_warning: 5
+netdata_inbound_packets_dropped_ratio_eth0_critical: 10

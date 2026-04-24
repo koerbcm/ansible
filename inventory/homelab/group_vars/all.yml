@@ -10,6 +10,7 @@ homelab_failure_notify_ntfy_token: "{{ vault_homelab_failure_notify_ntfy_token |
 base_packages:
   - vim
   - curl
+  - jq
   - wget
   - net-tools
   - ca-certificates

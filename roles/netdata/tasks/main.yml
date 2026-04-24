@@ -17,6 +17,19 @@
     success_msg: "Netdata configuration is valid."
   when: netdata_enabled | bool
 
+- name: Validate Netdata inbound drop override configuration
+  ansible.builtin.assert:
+    that:
+      - netdata_inbound_packets_dropped_ratio_eth0_override_dir | length > 0
+      - netdata_inbound_packets_dropped_ratio_eth0_override_file | length > 0
+      - (netdata_inbound_packets_dropped_ratio_eth0_warning | float) > 0
+      - (netdata_inbound_packets_dropped_ratio_eth0_critical | float) > (netdata_inbound_packets_dropped_ratio_eth0_warning | float)
+    fail_msg: "Netdata inbound drop override needs a valid file path and warning/critical thresholds."
+    success_msg: "Netdata inbound drop override configuration is valid."
+  when:
+    - netdata_enabled | bool
+    - netdata_inbound_packets_dropped_ratio_eth0_override_enabled | bool
+
 - name: Ensure Netdata project directory exists
   ansible.builtin.file:
     path: "{{ netdata_project_dir }}"
@@ -25,6 +38,29 @@
     group: root
     mode: "0755"
   when: netdata_enabled | bool
+
+- name: Ensure Netdata inbound drop override directory exists
+  ansible.builtin.file:
+    path: "{{ netdata_inbound_packets_dropped_ratio_eth0_override_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - netdata_enabled | bool
+    - netdata_inbound_packets_dropped_ratio_eth0_override_enabled | bool
+
+- name: Render Netdata inbound drop override for eth0
+  ansible.builtin.template:
+    src: netdata-inbound-packets-dropped-ratio-eth0.conf.j2
+    dest: "{{ netdata_inbound_packets_dropped_ratio_eth0_override_dir }}/{{ netdata_inbound_packets_dropped_ratio_eth0_override_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: netdata_inbound_packets_dropped_ratio_eth0_override_template_result
+  when:
+    - netdata_enabled | bool
+    - netdata_inbound_packets_dropped_ratio_eth0_override_enabled | bool
 
 - name: Render Netdata compose project
   ansible.builtin.template:
@@ -84,6 +120,32 @@
   when:
     - netdata_enabled | bool
     - not ansible_check_mode
+
+- name: Reload Netdata health configuration
+  block:
+    - name: Reload Netdata health configuration via netdatacli
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ netdata_container_name }}"
+          - netdatacli
+          - reload-health
+      changed_when: false
+  rescue:
+    - name: Reload Netdata health configuration via SIGUSR2 fallback
+      ansible.builtin.command:
+        argv:
+          - docker
+          - kill
+          - --signal=USR2
+          - "{{ netdata_container_name }}"
+      changed_when: false
+  when:
+    - netdata_enabled | bool
+    - not ansible_check_mode
+    - netdata_inbound_packets_dropped_ratio_eth0_override_enabled | bool
+    - (netdata_inbound_packets_dropped_ratio_eth0_override_template_result is changed) or (netdata_compose_result is changed)
 
 - name: Show Netdata compose actions
   ansible.builtin.debug:

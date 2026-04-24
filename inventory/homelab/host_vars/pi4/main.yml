@@ -27,6 +27,9 @@ uptime_kuma_backup_include_project_files: true
 netdata_enabled: true
 netdata_claim_rooms: cfa21087-dee5-4064-9de6-babda1d020f7
 netdata_claim_token: "{{ docker2_netdata_claim_token }}"
+netdata_inbound_packets_dropped_ratio_eth0_override_enabled: true
+netdata_inbound_packets_dropped_ratio_eth0_warning: 5
+netdata_inbound_packets_dropped_ratio_eth0_critical: 10
 
 maintenance_pre_backup_services:
   - uptime-kuma-backup.service
