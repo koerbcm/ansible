@@ -20,3 +20,13 @@ storage_housekeeping_prune_volumes: false
 storage_housekeeping_include_journal_cleanup: true
 storage_housekeeping_journal_vacuum_time: 30d
 storage_housekeeping_include_tmpfiles_cleanup: true
+
+storage_housekeeping_compose_audit_enabled: true
+storage_housekeeping_compose_audit_search_roots:
+  - /opt
+  - /srv
+  - /home
+storage_housekeeping_compose_audit_maxdepth: 4
+storage_housekeeping_compose_allowed_prefix_pattern: "^/opt/stacks/"
+storage_housekeeping_compose_audit_ignore_paths: []
+storage_housekeeping_compose_audit_fail_on_unexpected: false

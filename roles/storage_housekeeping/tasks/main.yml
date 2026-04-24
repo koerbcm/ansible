@@ -8,6 +8,10 @@
       - storage_housekeeping_prune_unused_images_until | length > 0
       - storage_housekeeping_prune_builder_cache_until | length > 0
       - storage_housekeeping_journal_vacuum_time | length > 0
+      - storage_housekeeping_compose_audit_search_roots is iterable
+      - storage_housekeeping_compose_audit_search_roots | length > 0
+      - storage_housekeeping_compose_allowed_prefix_pattern | length > 0
+      - storage_housekeeping_compose_audit_ignore_paths is iterable
     fail_msg: "Storage housekeeping configuration is invalid."
     success_msg: "Storage housekeeping configuration is valid."
   when: storage_housekeeping_enabled | bool
@@ -51,6 +55,48 @@
     - storage_housekeeping_include_docker | bool
     - storage_housekeeping_docker_version.rc == 0
 
+- name: Discover compose files on host
+  ansible.builtin.shell: |
+    set -o pipefail
+    find {{ storage_housekeeping_compose_audit_search_roots | map('quote') | join(' ') }} \
+      -maxdepth {{ storage_housekeeping_compose_audit_maxdepth | int }} \
+      \( -name 'compose.yml' -o -name 'compose.yaml' -o -name 'docker-compose.yml' -o -name 'docker-compose.yaml' \) \
+      2>/dev/null | sort
+  args:
+    executable: /bin/bash
+  register: storage_housekeeping_compose_discovery
+  changed_when: false
+  failed_when: false
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_compose_audit_enabled | bool
+
+- name: Build compose location audit facts
+  ansible.builtin.set_fact:
+    storage_housekeeping_compose_paths: >-
+      {{
+        storage_housekeeping_compose_discovery.stdout_lines
+        | default([])
+        | map('trim')
+        | reject('equalto', '')
+        | list
+      }}
+    storage_housekeeping_compose_unexpected_paths: >-
+      {{
+        (
+          storage_housekeeping_compose_discovery.stdout_lines
+          | default([])
+          | map('trim')
+          | reject('equalto', '')
+          | reject('match', storage_housekeeping_compose_allowed_prefix_pattern)
+          | list
+        )
+        | difference(storage_housekeeping_compose_audit_ignore_paths | default([]))
+      }}
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_compose_audit_enabled | bool
+
 - name: Report storage housekeeping plan
   ansible.builtin.debug:
     msg:
@@ -65,7 +111,38 @@
       - "Prune unused volumes: {{ storage_housekeeping_prune_volumes | bool }}"
       - "Journal vacuum: {{ storage_housekeeping_include_journal_cleanup | bool }} ({{ storage_housekeeping_journal_vacuum_time }})"
       - "Tmpfiles cleanup: {{ storage_housekeeping_include_tmpfiles_cleanup | bool }}"
+      - "Compose location audit enabled: {{ storage_housekeeping_compose_audit_enabled | bool }}"
   when: storage_housekeeping_enabled | bool
+
+- name: Report compose location audit summary
+  ansible.builtin.debug:
+    msg:
+      - "Discovered compose files: {{ storage_housekeeping_compose_paths | default([]) | length }}"
+      - "Unexpected compose paths: {{ storage_housekeeping_compose_unexpected_paths | default([]) | length }}"
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_compose_audit_enabled | bool
+
+- name: Report unexpected compose paths
+  ansible.builtin.debug:
+    var: storage_housekeeping_compose_unexpected_paths
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_compose_audit_enabled | bool
+    - (storage_housekeeping_compose_unexpected_paths | default([]) | length) > 0
+
+- name: Enforce compose location policy when requested
+  ansible.builtin.assert:
+    that:
+      - (storage_housekeeping_compose_unexpected_paths | default([]) | length) == 0
+    fail_msg: >-
+      Unexpected compose files were found outside allowed prefixes:
+      {{ storage_housekeeping_compose_unexpected_paths | default([]) }}
+    success_msg: "All discovered compose files are under allowed prefixes."
+  when:
+    - storage_housekeeping_enabled | bool
+    - storage_housekeeping_compose_audit_enabled | bool
+    - storage_housekeeping_compose_audit_fail_on_unexpected | bool
 
 - name: Prune stopped docker containers
   ansible.builtin.command:

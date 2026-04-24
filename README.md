@@ -27,6 +27,11 @@ The target design is:
 - NFS-backed application data is mounted by the host, not hidden inside ad hoc Docker volume definitions
 - Portainer is optional, not authoritative
 
+Compose location convention:
+
+- source template: `templates/<app>.compose.yml.j2`
+- rendered on host: `/opt/stacks/<app>/compose.yml`
+
 ## Current Canonical Layout
 
 ```text
