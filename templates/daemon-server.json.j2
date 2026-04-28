@@ -9,8 +9,8 @@
 {% if docker_dns_servers | default([]) | length > 0 %}
 {% set _ = daemon.update({'dns': docker_dns_servers}) %}
 {% endif %}
-{% if docker_gelf_address | default('') | length > 0 %}
+{% if docker_daemon_gelf_address | default('') | length > 0 %}
 {% set _ = daemon.update({'log-driver': 'gelf'}) %}
-{% set _ = daemon.update({'log-opts': {'gelf-address': docker_gelf_address, 'tag': '{{.Name}}/{{.ID}}'}}) %}
+{% set _ = daemon.update({'log-opts': {'gelf-address': docker_daemon_gelf_address, 'tag': '{{.Name}}/{{.ID}}'}}) %}
 {% endif %}
 {{ daemon | to_nice_json }}

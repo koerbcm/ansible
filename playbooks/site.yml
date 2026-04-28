@@ -238,7 +238,7 @@
         - apps
 
 - name: Portainer agent
-  hosts: portainer_agent_hosts
+  hosts: docker_hosts
   become: true
   roles:
     - role: portainer_agent

@@ -118,6 +118,8 @@ netdata_config_volume_name: netdata_netdataconfig
 netdata_cache_volume_name: netdata_netdatacache
 netdata_lib_volume_name: netdata_netdatalib
 
+portainer_agent_enabled: false
+
 homepage_enabled: true
 homepage_project_name: homepage
 homepage_project_dir: /opt/stacks/homepage

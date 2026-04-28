@@ -116,6 +116,7 @@
       - "{{ netdata_compose_file }}"
     state: present
     pull: "{{ docker_compose_pull_policy | default(omit) }}"
+    recreate: "{{ docker_compose_recreate | default(omit) }}"
   register: netdata_compose_result
   when:
     - netdata_enabled | bool

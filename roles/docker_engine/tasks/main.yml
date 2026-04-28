@@ -102,6 +102,19 @@
     group: root
     mode: "0755"
 
+- name: Resolve Docker mount dependency paths
+  ansible.builtin.set_fact:
+    docker_required_mount_paths: >-
+      {{
+        (
+          (nfs_mounts | default([]))
+          | map(attribute='path')
+          | list
+        )
+        if (docker_require_mounts_for_nfs_paths | bool)
+        else []
+      }}
+
 - name: Install Docker systemd override
   ansible.builtin.template:
     src: "{{ playbook_dir | dirname }}/templates/docker-override.conf.j2"

@@ -1,3 +1,7 @@
 ---
 docker_daemon_hosts:
   - "unix:///var/run/docker.sock"
+
+# Manage Portainer agent on Docker hosts by default.
+# docker1 is the Portainer server and opts out via host_vars.
+portainer_agent_enabled: true

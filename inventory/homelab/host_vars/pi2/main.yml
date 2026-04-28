@@ -1,6 +1,7 @@
 ---
 # Pi 5 cutover completed on 2026-04-13.
 # `pi-bootstrap` was a temporary bootstrap admin and should remain absent.
+docker_gelf_address: ""
 
 nfs_mounts:
   - path: /mnt/dockerVolumes

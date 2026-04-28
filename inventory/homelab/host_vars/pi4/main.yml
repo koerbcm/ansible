@@ -1,6 +1,7 @@
 ---
 # Reprovisioned legacy Raspberry Pi host.
 # Uptime Kuma is being cut over here from pi2.
+docker_gelf_address: ""
 
 base_hostname_manage: true
 base_hostname: pi4

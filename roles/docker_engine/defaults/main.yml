@@ -26,6 +26,7 @@ docker_use_fallback_packages: false
 docker_admin_users: []
 docker_dns_servers: []
 docker_gelf_address: ""
+docker_daemon_gelf_address: ""
 docker_daemon_hosts:
   - "unix:///var/run/docker.sock"
 docker_tls_enabled: false
@@ -33,3 +34,6 @@ docker_tls_verify: false
 docker_tls_san_ips: []
 docker_tls_subject_alt_names: []
 docker_cert_valid_days: 3650
+docker_wait_for_network_online: true
+docker_wait_for_remote_fs: true
+docker_require_mounts_for_nfs_paths: true

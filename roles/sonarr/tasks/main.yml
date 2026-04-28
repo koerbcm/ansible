@@ -91,6 +91,7 @@
       - "{{ sonarr_compose_file }}"
     state: present
     pull: "{{ docker_compose_pull_policy | default(omit) }}"
+    recreate: "{{ docker_compose_recreate | default(omit) }}"
   register: sonarr_compose_result
   when:
     - sonarr_enabled | bool

@@ -1,4 +1,6 @@
 ---
+docker_gelf_address: ""
+
 nfs_mounts:
   - path: /mnt/dockerVolumes
     src: 10.27.27.9:/volume1/dockerVolumes

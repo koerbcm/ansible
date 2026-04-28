@@ -1,3 +1,16 @@
+[Unit]
+{% if docker_wait_for_network_online | bool %}
+Wants=network-online.target
+After=network-online.target
+{% endif %}
+{% if docker_wait_for_remote_fs | bool %}
+Wants=remote-fs.target
+After=remote-fs.target
+{% endif %}
+{% if (docker_required_mount_paths | default([])) | length > 0 %}
+RequiresMountsFor={{ (docker_required_mount_paths | default([]) | unique | join(' ')) }}
+{% endif %}
+
 [Service]
 ExecStart=
 ExecStart={{ docker_service_execstart }}

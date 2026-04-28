@@ -86,6 +86,7 @@
       - "{{ homepage_compose_file }}"
     state: present
     pull: "{{ docker_compose_pull_policy | default(omit) }}"
+    recreate: "{{ docker_compose_recreate | default(omit) }}"
   register: homepage_compose_result
   when:
     - homepage_enabled | bool

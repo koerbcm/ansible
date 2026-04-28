@@ -77,6 +77,10 @@ homelab_stack_root: /opt/stacks
 # Optional global pull policy for Compose-managed services.
 # Set at runtime for controlled refreshes, e.g.:
 # ansible-playbook playbooks/site.yml --limit docker1,docker2 --tags apps -e docker_compose_pull_policy=always
+# Optional one-time recreate control for Compose-managed services.
+# Useful when daemon-level defaults (for example logging driver) change and
+# existing containers need replacement to pick up the new defaults:
+# ansible-playbook playbooks/site.yml --limit docker1,docker2,pi1,pi2,pi4 --tags apps -e docker_compose_recreate=always
 
 # Optional local Uptime Kuma maintenance hooks.
 # Modes:

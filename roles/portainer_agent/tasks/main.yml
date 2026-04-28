@@ -74,6 +74,7 @@
       - "{{ portainer_agent_compose_file }}"
     state: present
     pull: "{{ docker_compose_pull_policy | default(omit) }}"
+    recreate: "{{ docker_compose_recreate | default(omit) }}"
   when:
     - portainer_agent_enabled | bool
     - not ansible_check_mode
